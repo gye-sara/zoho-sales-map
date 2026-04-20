@@ -27,3 +27,10 @@ jobs:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GOOGLE_MAPS_KEY:      ${{ secrets.GOOGLE_MAPS_KEY }}
+
+      - name: Geocodificar pendientes
+        run: node scripts/geocode-pending.js
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GOOGLE_MAPS_KEY:      ${{ secrets.GOOGLE_MAPS_KEY }}
