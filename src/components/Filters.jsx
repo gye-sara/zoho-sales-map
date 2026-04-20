@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase.js';
 
-export default function Filters({ filtros, onChange }) {
+export default function Filters({ filtros, onChange, onClose }) {
   const [todos, setTodos] = useState([]);
 
   useEffect(() => {
@@ -9,20 +9,17 @@ export default function Filters({ filtros, onChange }) {
       let allData = [];
       let page = 0;
       const PAGE_SIZE = 1000;
-
       while (true) {
         const { data, error } = await supabase
           .from('fianzas')
           .select('sucursal,analytics_agente,estado_contrato,categoria_garantia')
           .not('lat', 'is', null)
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
         if (error || !data || data.length === 0) break;
         allData = allData.concat(data);
         if (data.length < PAGE_SIZE) break;
         page++;
       }
-
       setTodos(allData);
     }
     fetchTodos();
@@ -37,7 +34,6 @@ export default function Filters({ filtros, onChange }) {
       if (campo !== 'categoria' && filtros.categoria)               base = base.filter(d => d.categoria_garantia === filtros.categoria);
       return base;
     };
-
     return {
       sucursales: [...new Set(opcionesPara('sucursal').map(d => d.sucursal).filter(Boolean))].sort(),
       agentes:    [...new Set(opcionesPara('analytics_agente').map(d => d.analytics_agente).filter(Boolean))].sort(),
@@ -49,23 +45,23 @@ export default function Filters({ filtros, onChange }) {
   const set = (key, value) => onChange({ ...filtros, [key]: value || undefined });
 
   const style = {
-    wrap:  { width: '260px', background: 'white', padding: '16px', overflowY: 'auto', borderRight: '1px solid #e0e0e0' },
-    title: { fontWeight: 700, fontSize: '14px', color: '#1a1a2e', marginBottom: '4px' },
+    wrap:  { width: '280px', background: 'white', padding: '16px', height: '100%' },
     label: { display: 'block', fontSize: '11px', fontWeight: 600, color: '#888', marginBottom: '4px', marginTop: '14px', textTransform: 'uppercase', letterSpacing: '0.4px' },
     sel:   { width: '100%', padding: '7px 8px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', background: 'white', cursor: 'pointer' },
     btn:   { width: '100%', marginTop: '20px', padding: '9px', background: '#1a1a2e', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 },
-    badge: { display: 'inline-block', marginLeft: '6px', background: '#e0e7ff', color: '#3730a3', borderRadius: '10px', padding: '1px 6px', fontSize: '10px', fontWeight: 600 },
   };
-
-  const activeCount = Object.values(filtros).filter(Boolean).length;
 
   return (
     <div style={style.wrap}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <p style={style.title}>Filtros</p>
-        {activeCount > 0 && (
-          <span style={style.badge}>{activeCount} activo{activeCount > 1 ? 's' : ''}</span>
-        )}
+      {/* Header con botón cerrar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <p style={{ fontWeight: 700, fontSize: '14px', color: '#1a1a2e' }}>Filtros</p>
+        <button
+          onClick={onClose}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#999', lineHeight: 1 }}
+        >
+          ✕
+        </button>
       </div>
 
       <label style={style.label}>Sucursal</label>
@@ -98,9 +94,7 @@ export default function Filters({ filtros, onChange }) {
       <label style={style.label}>Fecha inicio hasta</label>
       <input type="date" style={style.sel} value={filtros.fechaHasta ?? ''} onChange={e => set('fechaHasta', e.target.value)} />
 
-      <button style={style.btn} onClick={() => onChange({})}>
-        Limpiar filtros
-      </button>
+      <button style={style.btn} onClick={() => onChange({})}>Limpiar filtros</button>
     </div>
   );
 }
