@@ -120,10 +120,9 @@ async function fetchRangeSafe(token, fields, dateFrom, dateTo, level = 0) {
   const { results, limitReached } = await fetchRange(token, fields, dateFrom, dateTo);
   if (!limitReached) return results;
   if (level >= 2) {
-    console.warn(`⚠️  ${dateFrom}→${dateTo} >2000 en rango mínimo, tomando primeros 2000`);
+    console.warn(`⚠️  ${dateFrom}→${dateTo} >2000 en rango mínimo`);
     return results;
   }
-  console.log(`⚠️  Límite en ${dateFrom}→${dateTo}, subdividiendo en semanas...`);
   const subRanges = generateWeekRanges(dateFrom, dateTo);
   let allResults = [];
   for (const sub of subRanges) {
@@ -133,7 +132,6 @@ async function fetchRangeSafe(token, fields, dateFrom, dateTo, level = 0) {
   return allResults;
 }
 
-// Detecta referencias catastrales — no son geocodificables
 function esCatastro(str) {
   if (!str) return false;
   const limpio = str.trim().replace(/\s/g, '');
@@ -141,32 +139,21 @@ function esCatastro(str) {
          /^[0-9A-Z]{14,20}$/.test(limpio);
 }
 
-// Construye la mejor dirección posible para geocodificar
-// Google Maps interpreta bien el texto libre en español
 function buildAddress(d) {
   const propiedad = d.Direccion_Propiedad?.trim();
   const direccion = d.Direccion?.trim();
 
-  // 1. Direccion_Propiedad completa (campo calculado de Zoho)
-  if (propiedad && !esCatastro(propiedad)) {
+  if (propiedad && !esCatastro(propiedad))
     return { address: `${propiedad}, España`, calidad: 'completa' };
-  }
 
-  // 2. Dirección suelta + ciudad + provincia + cp
   if (direccion && !esCatastro(direccion)) {
     const parts = [direccion, d.Ciudad, d.Provincia, d.Codigo_Postal].filter(Boolean);
-    if (parts.length >= 2) {
+    if (parts.length >= 2)
       return { address: `${parts.join(', ')}, España`, calidad: 'parcial' };
-    }
   }
 
-  // 3. Solo ciudad y/o provincia
-  if (d.Ciudad || d.Provincia) {
-    return {
-      address: [d.Ciudad, d.Provincia, 'España'].filter(Boolean).join(', '),
-      calidad: 'ciudad'
-    };
-  }
+  if (d.Ciudad || d.Provincia)
+    return { address: [d.Ciudad, d.Provincia, 'España'].filter(Boolean).join(', '), calidad: 'ciudad' };
 
   return { address: null, calidad: 'sin_direccion' };
 }
@@ -188,6 +175,7 @@ async function geocode(address) {
   }
 }
 
+// ── Mapeo SIN lat/lng/geocodificado — esos se preservan del upsert ──
 function mapDeal(d) {
   return {
     zoho_id:                             d.id,
@@ -248,26 +236,63 @@ function mapDeal(d) {
     forma_de_pago:                       d.Forma_de_Pago,
     zoho_modified_time:                  d.Modified_Time ?? null,
     synced_at:                           new Date().toISOString(),
+    // ⚠️ lat, lng, geocodificado y calidad_geocodificacion NO se incluyen aquí
+    // para no sobreescribir los valores ya guardados
   };
 }
 
 async function upsertBatch(rows) {
   const { error } = await supabase
     .from('fianzas')
-    .upsert(rows, { onConflict: 'zoho_id' });
+    .upsert(rows, {
+      onConflict: 'zoho_id',
+      ignoreDuplicates: false,
+    });
   if (error) throw new Error(`Supabase upsert error: ${error.message}`);
+}
+
+async function geocodeNuevos(deals) {
+  // Solo geocodificar los que NO tienen coordenadas aún
+  const zohoIds = deals.map(d => d.id);
+
+  // Consultar cuáles ya tienen lat en Supabase
+  const { data: existentes } = await supabase
+    .from('fianzas')
+    .select('zoho_id')
+    .in('zoho_id', zohoIds)
+    .not('lat', 'is', null);
+
+  const yaGeocodificados = new Set((existentes ?? []).map(r => r.zoho_id));
+  const pendientes = deals.filter(d => !yaGeocodificados.has(d.id));
+
+  if (pendientes.length === 0) return 0;
+
+  console.log(`🗺️  Geocodificando ${pendientes.length} nuevos...`);
+  let count = 0;
+
+  for (const deal of pendientes) {
+    const { address, calidad } = buildAddress(deal);
+    if (!address) {
+      await supabase.from('fianzas')
+        .update({ calidad_geocodificacion: 'sin_direccion' })
+        .eq('zoho_id', deal.id);
+      continue;
+    }
+
+    const { lat, lng } = await geocode(address);
+    await supabase.from('fianzas')
+      .update({ lat, lng, geocodificado: lat !== null, calidad_geocodificacion: calidad })
+      .eq('zoho_id', deal.id);
+
+    if (lat) count++;
+  }
+
+  return count;
 }
 
 async function main() {
   console.log('🚀 Iniciando sync Zoho → Supabase');
   const token = await getAccessToken();
-
-  // Obtener los ya geocodificados para no repetir llamadas a Google Maps
-  const { data: existing } = await supabase
-    .from('fianzas')
-    .select('zoho_id')
-    .not('lat', 'is', null);
-  const geocodedIds = new Set((existing ?? []).map(r => r.zoho_id));
 
   const START_DATE = '2020-01-01';
   const END_DATE   = new Date().toISOString().split('T')[0];
@@ -285,46 +310,30 @@ async function main() {
       fetchRangeSafe(token, FIELDS_BATCH_2, range.from, range.to),
     ]);
 
-    if (b1.length === 0) {
-      console.log('0 deals');
-      continue;
-    }
+    if (b1.length === 0) { console.log('0 deals'); continue; }
 
-    // Combinar los dos batches por id
     const extraMap = {};
     b2.forEach(d => { extraMap[d.id] = d; });
     const deals = b1
       .filter(d => !seenIds.has(d.id))
       .map(d => { seenIds.add(d.id); return { ...d, ...(extraMap[d.id] ?? {}) }; });
 
-    // Mapear + geocodificar
-    const rows = [];
-    for (const deal of deals) {
-      const row = mapDeal(deal);
-      const { address, calidad } = buildAddress(deal);
-      row.calidad_geocodificacion = calidad;
-
-      // Solo geocodificar si no tiene coordenadas ya
-      if (!geocodedIds.has(deal.id) && address) {
-        const { lat, lng } = await geocode(address);
-        row.lat = lat;
-        row.lng = lng;
-        row.geocodificado = lat !== null;
-        if (lat) { geocodedIds.add(deal.id); totalGeocoded++; }
-      }
-      rows.push(row);
-    }
-
-    // Guardar inmediatamente en lotes de 100
+    // 1. Guardar datos de Zoho SIN tocar lat/lng
+    const rows = deals.map(mapDeal);
     const BATCH_SIZE = 100;
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       await upsertBatch(rows.slice(i, i + BATCH_SIZE));
     }
     totalSaved += rows.length;
-    console.log(`${deals.length} deals → 💾 guardados (total: ${totalSaved})`);
+
+    // 2. Geocodificar solo los nuevos (sin coordenadas)
+    const geocodedCount = await geocodeNuevos(deals);
+    totalGeocoded += geocodedCount;
+
+    console.log(`${deals.length} deals → 💾 guardados${geocodedCount > 0 ? `, 🗺️ ${geocodedCount} geocodificados` : ''} (total: ${totalSaved})`);
   }
 
-  console.log(`\n✅ Sync completado — ${totalSaved} deals, ${totalGeocoded} geocodificados`);
+  console.log(`\n✅ Sync completado — ${totalSaved} deals, ${totalGeocoded} nuevas geocodificaciones`);
 }
 
 main().catch(err => {
