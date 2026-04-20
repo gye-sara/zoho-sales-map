@@ -18,7 +18,7 @@ jobs:
       - name: Instalar dependencias
         run: npm install
 
-      - name: Ejecutar sync
+      - name: Sync fianzas
         run: node scripts/sync.js
         env:
           ZOHO_CLIENT_ID:       ${{ secrets.ZOHO_CLIENT_ID }}
@@ -34,3 +34,12 @@ jobs:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GOOGLE_MAPS_KEY:      ${{ secrets.GOOGLE_MAPS_KEY }}
+
+      - name: Sync módulos relacionados
+        run: node scripts/sync-related.js
+        env:
+          ZOHO_CLIENT_ID:       ${{ secrets.ZOHO_CLIENT_ID }}
+          ZOHO_CLIENT_SECRET:   ${{ secrets.ZOHO_CLIENT_SECRET }}
+          ZOHO_REFRESH_TOKEN:   ${{ secrets.ZOHO_REFRESH_TOKEN }}
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

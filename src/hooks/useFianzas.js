@@ -11,7 +11,6 @@ export function useFianzas(filtros = {}) {
     async function fetchData() {
       setLoading(true);
       try {
-        // ── 1. Fianzas CON coordenadas (para el mapa) ─────────────────
         let allData = [];
         let page = 0;
         const PAGE_SIZE = 1000;
@@ -19,7 +18,18 @@ export function useFianzas(filtros = {}) {
         while (true) {
           let query = supabase
             .from('fianzas')
-            .select('zoho_id,deal_name,id_garantia,nombre_contacto,nombre_inmobiliaria,comercial_garantiaya,analytics_agente,sucursal,provincia,ciudad,direccion_completa,lat,lng,amount,alquiler,estado_contrato,calidad_geocodificacion,fecha_inicio_garantia,fecha_finalizacion_garantia,tipo_alquiler,categoria_garantia')
+            .select(`
+              zoho_id, deal_name, id_garantia, nombre_contacto,
+              nombre_inmobiliaria, comercial_garantiaya, analytics_agente,
+              sucursal, provincia, ciudad, direccion_completa,
+              lat, lng, amount, alquiler, estado_contrato,
+              calidad_geocodificacion, fecha_inicio_garantia,
+              fecha_finalizacion_garantia, tipo_alquiler, categoria_garantia,
+              renovaciones(id, name, stage, renovacion_n, closing_date, amount, estado_contrato),
+              impagos_recupero(id, name, fase, total_reclamos, saldo_pendiente, total_pagado),
+              impagos_notificaciones(id, name, fase, periodo_mes, periodo_ano, importe),
+              impagos_legales(id, name, fase_legal, caso_activo, saldo_pendiente, saldo_recuperado)
+            `)
             .not('lat', 'is', null)
             .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
@@ -38,7 +48,6 @@ export function useFianzas(filtros = {}) {
           page++;
         }
 
-        // ── 2. Contar las SIN coordenadas (mismos filtros) ────────────
         let countQuery = supabase
           .from('fianzas')
           .select('zoho_id', { count: 'exact', head: true })
