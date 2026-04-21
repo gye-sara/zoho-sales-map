@@ -24,7 +24,8 @@ export function useFianzas(filtros = {}) {
               sucursal, provincia, ciudad, direccion_completa,
               lat, lng, amount, alquiler, estado_contrato,
               calidad_geocodificacion, fecha_inicio_garantia,
-              fecha_finalizacion_garantia, tipo_alquiler, categoria_garantia,
+              fecha_finalizacion_garantia, closing_date,
+              duracion_contrato_meses, tipo_alquiler, categoria_garantia,
               renovaciones(id, name, stage, renovacion_n, closing_date, amount, estado_contrato),
               impagos_recupero(id, name, fase, total_reclamos, saldo_pendiente, total_pagado),
               impagos_notificaciones(id, name, fase, periodo_mes, periodo_ano, importe),
@@ -35,6 +36,7 @@ export function useFianzas(filtros = {}) {
 
           if (filtros.sucursal)         query = query.eq('sucursal', filtros.sucursal);
           if (filtros.analytics_agente) query = query.eq('analytics_agente', filtros.analytics_agente);
+          if (filtros.inmobiliaria)     query = query.eq('nombre_inmobiliaria', filtros.inmobiliaria);
           if (filtros.estado)           query = query.eq('estado_contrato', filtros.estado);
           if (filtros.categoria)        query = query.eq('categoria_garantia', filtros.categoria);
           if (filtros.fechaDesde)       query = query.gte('fecha_inicio_garantia', filtros.fechaDesde);
@@ -48,6 +50,11 @@ export function useFianzas(filtros = {}) {
           page++;
         }
 
+        if (filtros.conRenovaciones)   allData = allData.filter(f => f.renovaciones?.length > 0);
+        if (filtros.conRecuperos)      allData = allData.filter(f => f.impagos_recupero?.length > 0);
+        if (filtros.conNotificaciones) allData = allData.filter(f => f.impagos_notificaciones?.length > 0);
+        if (filtros.conLegales)        allData = allData.filter(f => f.impagos_legales?.length > 0);
+
         let countQuery = supabase
           .from('fianzas')
           .select('zoho_id', { count: 'exact', head: true })
@@ -55,6 +62,7 @@ export function useFianzas(filtros = {}) {
 
         if (filtros.sucursal)         countQuery = countQuery.eq('sucursal', filtros.sucursal);
         if (filtros.analytics_agente) countQuery = countQuery.eq('analytics_agente', filtros.analytics_agente);
+        if (filtros.inmobiliaria)     countQuery = countQuery.eq('nombre_inmobiliaria', filtros.inmobiliaria);
         if (filtros.estado)           countQuery = countQuery.eq('estado_contrato', filtros.estado);
         if (filtros.categoria)        countQuery = countQuery.eq('categoria_garantia', filtros.categoria);
         if (filtros.fechaDesde)       countQuery = countQuery.gte('fecha_inicio_garantia', filtros.fechaDesde);

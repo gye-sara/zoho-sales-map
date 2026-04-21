@@ -14,99 +14,152 @@ const esc = (str) => (str ?? '—')
 
 const fmt = (n) => n ? `€${Number(n).toLocaleString('es-ES')}` : '—';
 
+const fmtDate = (d) => {
+  if (!d) return null;
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
+};
+
+const faseColor = (fase) => {
+  if (!fase) return '#999';
+  const f = fase.toLowerCase();
+  if (f.includes('pagado') || f.includes('cerrado') || f.includes('recuperado')) return '#10b981';
+  if (f.includes('legal') || f.includes('demanda') || f.includes('juicio')) return '#ef4444';
+  if (f.includes('nuevo') || f.includes('pendiente') || f.includes('notif')) return '#f59e0b';
+  return '#6366f1';
+};
+
 function buildPopup(f) {
   const isVigente        = f.estado_contrato === 'VIGENTE';
   const estadoBadgeBg    = isVigente ? '#dcfce7' : '#fef3c7';
   const estadoBadgeColor = isVigente ? '#166534' : '#92400e';
 
-  const renovaciones      = f.renovaciones ?? [];
-  const recuperos         = f.impagos_recupero ?? [];
-  const notificaciones    = f.impagos_notificaciones ?? [];
-  const legales           = f.impagos_legales ?? [];
+  const renovaciones   = f.renovaciones ?? [];
+  const recuperos      = f.impagos_recupero ?? [];
+  const notificaciones = f.impagos_notificaciones ?? [];
+  const legales        = f.impagos_legales ?? [];
 
-  const tieneImpagos = recuperos.length > 0 || notificaciones.length > 0 || legales.length > 0;
-
-  // Sección renovaciones
   let secRenovaciones = '';
   if (renovaciones.length > 0) {
     const rows = renovaciones.map(r => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f5f5f5;">
-        <div>
-          <div style="font-size:11px;color:#222;font-weight:500;">${esc(r.name)}</div>
-          <div style="font-size:10px;color:#999;">${esc(r.stage)} · Nº${esc(r.renovacion_n)}</div>
+      <div style="background:#f9f9f9;border-radius:6px;padding:8px 10px;margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(r.name)}</span>
+          <span style="font-size:11px;color:#10b981;font-weight:700;">${fmt(r.amount)}</span>
         </div>
-        <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${fmt(r.amount)}</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:10px;background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:10px;font-weight:500;">Nº ${esc(r.renovacion_n) === '—' ? '1' : esc(r.renovacion_n)}</span>
+          <span style="font-size:10px;background:#f0fdf4;color:#166534;padding:1px 6px;border-radius:10px;font-weight:500;">Fase: ${esc(r.stage)}</span>
+          ${r.estado_contrato ? `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;font-weight:500;">${esc(r.estado_contrato)}</span>` : ''}
+          ${r.closing_date ? `<span style="font-size:10px;color:#999;">Cierre: ${fmtDate(r.closing_date)}</span>` : ''}
+        </div>
       </div>
     `).join('');
     secRenovaciones = `
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0;">
-        <div style="font-size:10px;color:#999;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">
-          🔄 Renovaciones (${renovaciones.length})
+      <div style="margin-top:10px;padding-top:10px;border-top:2px solid #e0e7ff;">
+        <div style="font-size:11px;color:#3730a3;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">
+          🔄 Renovaciones — ${renovaciones.length} registro${renovaciones.length > 1 ? 's' : ''}
         </div>
         ${rows}
       </div>
     `;
   }
 
-  // Sección impagos
-  let secImpagos = '';
-  if (tieneImpagos) {
-    let impagosHtml = '';
-
-    if (recuperos.length > 0) {
-      impagosHtml += recuperos.map(r => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f5f5f5;">
-          <div>
-            <div style="font-size:11px;color:#222;font-weight:500;">${esc(r.name)}</div>
-            <div style="font-size:10px;color:#999;">Recupero · ${esc(r.fase)}</div>
+  let secRecuperos = '';
+  if (recuperos.length > 0) {
+    const rows = recuperos.map(r => `
+      <div style="background:#fff8f8;border-radius:6px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #ef4444;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(r.name)}</span>
+          <span style="font-size:10px;background:${faseColor(r.fase)}22;color:${faseColor(r.fase)};padding:1px 6px;border-radius:10px;font-weight:600;">${esc(r.fase)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px;">
+          <div style="font-size:10px;">
+            <span style="color:#999;">Total reclamado</span><br/>
+            <span style="font-weight:600;color:#ef4444;">${fmt(r.total_reclamos)}</span>
           </div>
-          <div style="text-align:right;">
-            <div style="font-size:10px;color:#ef4444;font-weight:600;">Pendiente: ${fmt(r.saldo_pendiente)}</div>
-            <div style="font-size:10px;color:#10b981;">Pagado: ${fmt(r.total_pagado)}</div>
+          <div style="font-size:10px;">
+            <span style="color:#999;">Saldo pendiente</span><br/>
+            <span style="font-weight:600;color:#f59e0b;">${fmt(r.saldo_pendiente)}</span>
+          </div>
+          <div style="font-size:10px;">
+            <span style="color:#999;">Total pagado</span><br/>
+            <span style="font-weight:600;color:#10b981;">${fmt(r.total_pagado)}</span>
           </div>
         </div>
-      `).join('');
-    }
-
-    if (notificaciones.length > 0) {
-      impagosHtml += notificaciones.map(n => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f5f5f5;">
-          <div>
-            <div style="font-size:11px;color:#222;font-weight:500;">${esc(n.name)}</div>
-            <div style="font-size:10px;color:#999;">Notificación · ${esc(n.periodo_mes)} ${esc(n.periodo_ano)}</div>
-          </div>
-          <span style="font-size:11px;color:#f59e0b;font-weight:600;">${fmt(n.importe)}</span>
+      </div>
+    `).join('');
+    secRecuperos = `
+      <div style="margin-top:10px;padding-top:10px;border-top:2px solid #fee2e2;">
+        <div style="font-size:11px;color:#ef4444;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">
+          ⚠️ Impagos Recupero — ${recuperos.length} caso${recuperos.length > 1 ? 's' : ''}
         </div>
-      `).join('');
-    }
+        ${rows}
+      </div>
+    `;
+  }
 
-    if (legales.length > 0) {
-      impagosHtml += legales.map(l => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f5f5f5;">
-          <div>
-            <div style="font-size:11px;color:#222;font-weight:500;">${esc(l.name)}</div>
-            <div style="font-size:10px;color:#ef4444;">Legal · ${esc(l.fase_legal)}</div>
+  let secNotificaciones = '';
+  if (notificaciones.length > 0) {
+    const rows = notificaciones.map(n => `
+      <div style="background:#fffbf0;border-radius:6px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #f59e0b;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(n.name)}</span>
+          <span style="font-size:11px;color:#f59e0b;font-weight:700;">${fmt(n.importe)}</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+          <span style="font-size:10px;background:${faseColor(n.fase)}22;color:${faseColor(n.fase)};padding:1px 6px;border-radius:10px;font-weight:600;">Fase: ${esc(n.fase)}</span>
+          ${n.periodo_mes ? `<span style="font-size:10px;color:#666;background:#f5f5f5;padding:1px 6px;border-radius:10px;">Período: ${esc(n.periodo_mes)} ${esc(n.periodo_ano)}</span>` : ''}
+        </div>
+      </div>
+    `).join('');
+    secNotificaciones = `
+      <div style="margin-top:10px;padding-top:10px;border-top:2px solid #fef3c7;">
+        <div style="font-size:11px;color:#d97706;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">
+          📋 Notificaciones Impago — ${notificaciones.length} registro${notificaciones.length > 1 ? 's' : ''}
+        </div>
+        ${rows}
+      </div>
+    `;
+  }
+
+  let secLegales = '';
+  if (legales.length > 0) {
+    const rows = legales.map(l => `
+      <div style="background:#fff0f0;border-radius:6px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #dc2626;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(l.name)}</span>
+          <span style="font-size:10px;background:${l.caso_activo ? '#fee2e2' : '#f0fdf4'};color:${l.caso_activo ? '#dc2626' : '#16a34a'};padding:1px 6px;border-radius:10px;font-weight:600;">
+            ${l.caso_activo ? '🔴 Activo' : '✅ Cerrado'}
+          </span>
+        </div>
+        <div style="font-size:10px;margin-bottom:4px;">
+          <span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:10px;font-weight:500;">Fase: ${esc(l.fase_legal)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px;">
+          <div style="font-size:10px;">
+            <span style="color:#999;">Saldo pendiente</span><br/>
+            <span style="font-weight:600;color:#ef4444;">${fmt(l.saldo_pendiente)}</span>
           </div>
-          <div style="text-align:right;">
-            <div style="font-size:10px;color:#ef4444;font-weight:600;">Pendiente: ${fmt(l.saldo_pendiente)}</div>
-            <div style="font-size:10px;color:#10b981;">Recuperado: ${fmt(l.saldo_recuperado)}</div>
+          <div style="font-size:10px;">
+            <span style="color:#999;">Saldo recuperado</span><br/>
+            <span style="font-weight:600;color:#10b981;">${fmt(l.saldo_recuperado)}</span>
           </div>
         </div>
-      `).join('');
-    }
-
-    secImpagos = `
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0;">
-        <div style="font-size:10px;color:#ef4444;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">
-          ⚠️ Impagos (${recuperos.length + notificaciones.length + legales.length})
+      </div>
+    `).join('');
+    secLegales = `
+      <div style="margin-top:10px;padding-top:10px;border-top:2px solid #fecaca;">
+        <div style="font-size:11px;color:#dc2626;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">
+          ⚖️ Impagos Legales — ${legales.length} caso${legales.length > 1 ? 's' : ''}
         </div>
-        ${impagosHtml}
+        ${rows}
       </div>
     `;
   }
 
   return `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;width:300px;">
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;width:300px;padding:14px 16px;">
       <div style="background:#1a1a2e;padding:12px 14px;margin:-14px -20px 12px;display:flex;align-items:center;justify-content:space-between;border-radius:4px 4px 0 0;">
         <span style="color:white;font-size:14px;font-weight:700;">${esc(f.deal_name)}</span>
         <span style="background:${estadoBadgeBg};color:${estadoBadgeColor};font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;text-transform:uppercase;">${esc(f.estado_contrato)}</span>
@@ -133,18 +186,33 @@ function buildPopup(f) {
           <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Alquiler</span>
           <span style="font-size:12px;color:#1a1a2e;font-weight:700;">${fmt(f.alquiler)}<span style="font-size:10px;font-weight:400;color:#999">/mes</span></span>
         </div>
+        <div style="height:1px;background:#f0f0f0;"></div>
+        ${fmtDate(f.closing_date) ? `
+        <div style="display:flex;justify-content:space-between;">
+          <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Fecha de cierre</span>
+          <span style="font-size:11px;color:#222;font-weight:500;">${fmtDate(f.closing_date)}</span>
+        </div>
+        ` : ''}
+        ${f.duracion_contrato_meses ? `
+        <div style="display:flex;justify-content:space-between;">
+          <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Duración contrato</span>
+          <span style="font-size:11px;color:#222;font-weight:500;">${esc(f.duracion_contrato_meses)} meses</span>
+        </div>
+        ` : ''}
       </div>
       ${secRenovaciones}
-      ${secImpagos}
+      ${secRecuperos}
+      ${secNotificaciones}
+      ${secLegales}
     </div>
   `;
 }
 
 export default function Map({ fianzas, stats, filtersOpen }) {
-  const mapRef      = useRef(null);
-  const mapObj      = useRef(null);
-  const layerRef    = useRef(null);
-  const zoomRef     = useRef(null);
+  const mapRef   = useRef(null);
+  const mapObj   = useRef(null);
+  const layerRef = useRef(null);
+  const zoomRef  = useRef(null);
   const [showPanel, setShowPanel] = useState(true);
 
   useEffect(() => {
@@ -191,9 +259,12 @@ export default function Map({ fianzas, stats, filtersOpen }) {
 
     fianzas.forEach(f => {
       if (!f.lat || !f.lng) return;
-      const isVigente = f.estado_contrato === 'VIGENTE';
-      const color     = isVigente ? '#10b981' : '#f59e0b';
-      const size      = 14;
+      const isVigente    = f.estado_contrato === 'VIGENTE';
+      const tieneImpagos = (f.impagos_recupero?.length > 0) ||
+                           (f.impagos_notificaciones?.length > 0) ||
+                           (f.impagos_legales?.length > 0);
+      const color = tieneImpagos ? '#ef4444' : isVigente ? '#10b981' : '#f59e0b';
+      const size  = 14;
 
       const icon = L.divIcon({
         html: `<div style="width:${size}px;height:${size}px;background:${color};border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>`,
@@ -203,7 +274,7 @@ export default function Map({ fianzas, stats, filtersOpen }) {
       });
 
       const marker = L.marker([parseFloat(f.lat), parseFloat(f.lng)], { icon });
-      marker.bindPopup(buildPopup(f), { maxWidth: 320 });
+      marker.bindPopup(buildPopup(f), { maxWidth: 320, maxHeight: 400 });
       cluster.addLayer(marker);
     });
 
@@ -235,10 +306,14 @@ export default function Map({ fianzas, stats, filtersOpen }) {
                 <span style={{ fontSize:'14px', color:'#10b981', fontWeight:700 }}>€{(stats?.totalAmount ?? 0).toLocaleString('es-ES')}</span>
               </div>
             </div>
-            <div style={{ fontWeight:600, fontSize:'11px', color:'#999', textTransform:'uppercase', letterSpacing:'0.5px' }}>Estado</div>
+            <div style={{ fontWeight:600, fontSize:'11px', color:'#999', textTransform:'uppercase', letterSpacing:'0.5px' }}>Estado marker</div>
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <span style={{ width:12, height:12, borderRadius:'50%', background:'#10b981', display:'inline-block', border:'2px solid white', boxShadow:'0 0 0 1px #10b981' }}/>
-              <span style={{ fontSize:'12px', color:'#333' }}>Vigente</span>
+              <span style={{ fontSize:'12px', color:'#333' }}>Vigente sin impagos</span>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <span style={{ width:12, height:12, borderRadius:'50%', background:'#ef4444', display:'inline-block', border:'2px solid white', boxShadow:'0 0 0 1px #ef4444' }}/>
+              <span style={{ fontSize:'12px', color:'#333' }}>Con impagos</span>
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <span style={{ width:12, height:12, borderRadius:'50%', background:'#f59e0b', display:'inline-block', border:'2px solid white', boxShadow:'0 0 0 1px #f59e0b' }}/>
