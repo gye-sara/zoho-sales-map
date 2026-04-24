@@ -1,18 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase.js';
+import RangoAlquiler from './RangoAlquiler.jsx';
 
 function SearchSelect({ label, value, onChange, options, placeholder }) {
   const [search, setSearch] = useState('');
   const [open, setOpen]     = useState(false);
-
-  const filtered = options.filter(o =>
-    o.toLowerCase().includes(search.toLowerCase())
-  );
-
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
   const selected = value ?? '';
 
   return (
-    <div style={{ position: 'relative', marginBottom: '2px' }}>
+    <div style={{ position:'relative', marginBottom:'2px' }}>
       <label style={{ display:'block', fontSize:'11px', fontWeight:600, color:'#888', marginBottom:'4px', marginTop:'14px', textTransform:'uppercase', letterSpacing:'0.4px' }}>
         {label}
       </label>
@@ -25,7 +22,6 @@ function SearchSelect({ label, value, onChange, options, placeholder }) {
         </span>
         <span style={{ color:'#999', fontSize:'10px', flexShrink:0 }}>{open ? '▲' : '▼'}</span>
       </div>
-
       {open && (
         <div style={{ position:'absolute', zIndex:2000, top:'100%', left:0, right:0, background:'white', border:'1px solid #ddd', borderRadius:'6px', boxShadow:'0 4px 16px rgba(0,0,0,0.12)', maxHeight:'220px', overflow:'hidden', display:'flex', flexDirection:'column' }}>
           <input
@@ -117,7 +113,6 @@ export default function Filters({ filtros, onChange, onClose }) {
     section: { marginTop:'16px', paddingTop:'14px', borderTop:'1px solid #f0f0f0' },
     sectionTitle: { fontSize:'11px', fontWeight:700, color:'#1a1a2e', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' },
     checkRow: { display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', cursor:'pointer' },
-    checkLabel: { fontSize:'12px', color:'#333' },
   };
 
   return (
@@ -130,75 +125,41 @@ export default function Filters({ filtros, onChange, onClose }) {
         <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'18px', color:'#999' }}>✕</button>
       </div>
 
-      {/* Filtros principales */}
-      <SearchSelect
-        label="Sucursal"
-        value={filtros.sucursal}
-        onChange={v => set('sucursal', v)}
-        options={opciones.sucursales}
-        placeholder="Todas las sucursales"
+      <SearchSelect label="Sucursal" value={filtros.sucursal} onChange={v => set('sucursal', v)} options={opciones.sucursales} placeholder="Todas las sucursales" />
+      <SearchSelect label="Comercial" value={filtros.analytics_agente} onChange={v => set('analytics_agente', v)} options={opciones.agentes} placeholder="Todos los comerciales" />
+      <SearchSelect label="Inmobiliaria" value={filtros.inmobiliaria} onChange={v => set('inmobiliaria', v)} options={opciones.inmobiliarias} placeholder="Todas las inmobiliarias" />
+      <SearchSelect label="Estado contrato" value={filtros.estado} onChange={v => set('estado', v)} options={opciones.estados} placeholder="Todos los estados" />
+      <SearchSelect label="Categoría" value={filtros.categoria} onChange={v => set('categoria', v)} options={opciones.categorias} placeholder="Todas las categorías" />
+
+      <RangoAlquiler
+        value={filtros.rangoAlquiler}
+        onChange={v => onChange({ ...filtros, rangoAlquiler: v || undefined })}
       />
 
-      <SearchSelect
-        label="Comercial"
-        value={filtros.analytics_agente}
-        onChange={v => set('analytics_agente', v)}
-        options={opciones.agentes}
-        placeholder="Todos los comerciales"
-      />
+      <div style={{ marginTop:'14px' }}>
+        <label style={style.label}>Fecha de cierre desde</label>
+        <input type="date" style={style.sel} value={filtros.fechaDesde ?? ''} onChange={e => set('fechaDesde', e.target.value)} />
+        <label style={style.label}>Fecha de cierre hasta</label>
+        <input type="date" style={style.sel} value={filtros.fechaHasta ?? ''} onChange={e => set('fechaHasta', e.target.value)} />
+      </div>
 
-      <SearchSelect
-        label="Inmobiliaria"
-        value={filtros.inmobiliaria}
-        onChange={v => set('inmobiliaria', v)}
-        options={opciones.inmobiliarias}
-        placeholder="Todas las inmobiliarias"
-      />
-
-      <SearchSelect
-        label="Estado contrato"
-        value={filtros.estado}
-        onChange={v => set('estado', v)}
-        options={opciones.estados}
-        placeholder="Todos los estados"
-      />
-
-      <SearchSelect
-        label="Categoría"
-        value={filtros.categoria}
-        onChange={v => set('categoria', v)}
-        options={opciones.categorias}
-        placeholder="Todas las categorías"
-      />
-
-      <label style={style.label}>Fecha inicio desde</label>
-      <input type="date" style={style.sel} value={filtros.fechaDesde ?? ''} onChange={e => set('fechaDesde', e.target.value)} />
-
-      <label style={style.label}>Fecha inicio hasta</label>
-      <input type="date" style={style.sel} value={filtros.fechaHasta ?? ''} onChange={e => set('fechaHasta', e.target.value)} />
-
-      {/* Filtros por módulos relacionados */}
       <div style={style.section}>
         <div style={style.sectionTitle}>Filtrar por actividad</div>
-
         <label style={style.checkRow}>
           <input type="checkbox" checked={!!filtros.conRenovaciones} onChange={e => set('conRenovaciones', e.target.checked ? 'true' : '')} />
-          <span style={style.checkLabel}>🔄 Con renovaciones</span>
+          <span style={{ fontSize:'12px', color:'#333' }}>🔄 Con renovaciones</span>
         </label>
-
         <label style={style.checkRow}>
           <input type="checkbox" checked={!!filtros.conRecuperos} onChange={e => set('conRecuperos', e.target.checked ? 'true' : '')} />
-          <span style={style.checkLabel}>⚠️ Con impagos recupero</span>
+          <span style={{ fontSize:'12px', color:'#333' }}>⚠️ Con impagos recupero</span>
         </label>
-
         <label style={style.checkRow}>
           <input type="checkbox" checked={!!filtros.conNotificaciones} onChange={e => set('conNotificaciones', e.target.checked ? 'true' : '')} />
-          <span style={style.checkLabel}>📋 Con notificaciones impago</span>
+          <span style={{ fontSize:'12px', color:'#333' }}>📋 Con notificaciones impago</span>
         </label>
-
         <label style={style.checkRow}>
           <input type="checkbox" checked={!!filtros.conLegales} onChange={e => set('conLegales', e.target.checked ? 'true' : '')} />
-          <span style={style.checkLabel}>⚖️ Con impagos legales</span>
+          <span style={{ fontSize:'12px', color:'#333' }}>⚖️ Con impagos legales</span>
         </label>
       </div>
 

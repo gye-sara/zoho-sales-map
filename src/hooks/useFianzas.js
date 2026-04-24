@@ -7,6 +7,8 @@ export function useFianzas(filtros = {}) {
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState(null);
 
+  const hayFiltros = Object.values(filtros).some(Boolean);
+
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
@@ -39,8 +41,10 @@ export function useFianzas(filtros = {}) {
           if (filtros.inmobiliaria)     query = query.eq('nombre_inmobiliaria', filtros.inmobiliaria);
           if (filtros.estado)           query = query.eq('estado_contrato', filtros.estado);
           if (filtros.categoria)        query = query.eq('categoria_garantia', filtros.categoria);
-          if (filtros.fechaDesde)       query = query.gte('fecha_inicio_garantia', filtros.fechaDesde);
-          if (filtros.fechaHasta)       query = query.lte('fecha_inicio_garantia', filtros.fechaHasta);
+          if (filtros.fechaDesde)       query = query.gte('closing_date', filtros.fechaDesde);
+          if (filtros.fechaHasta)       query = query.lte('closing_date', filtros.fechaHasta);
+          if (filtros.rangoAlquiler?.min != null) query = query.gte('alquiler', filtros.rangoAlquiler.min);
+          if (filtros.rangoAlquiler?.max != null && filtros.rangoAlquiler.max !== 999999) query = query.lte('alquiler', filtros.rangoAlquiler.max);
 
           const { data, error } = await query;
           if (error) throw error;
@@ -55,23 +59,18 @@ export function useFianzas(filtros = {}) {
         if (filtros.conNotificaciones) allData = allData.filter(f => f.impagos_notificaciones?.length > 0);
         if (filtros.conLegales)        allData = allData.filter(f => f.impagos_legales?.length > 0);
 
-        let countQuery = supabase
-          .from('fianzas')
-          .select('zoho_id', { count: 'exact', head: true })
-          .is('lat', null);
-
-        if (filtros.sucursal)         countQuery = countQuery.eq('sucursal', filtros.sucursal);
-        if (filtros.analytics_agente) countQuery = countQuery.eq('analytics_agente', filtros.analytics_agente);
-        if (filtros.inmobiliaria)     countQuery = countQuery.eq('nombre_inmobiliaria', filtros.inmobiliaria);
-        if (filtros.estado)           countQuery = countQuery.eq('estado_contrato', filtros.estado);
-        if (filtros.categoria)        countQuery = countQuery.eq('categoria_garantia', filtros.categoria);
-        if (filtros.fechaDesde)       countQuery = countQuery.gte('fecha_inicio_garantia', filtros.fechaDesde);
-        if (filtros.fechaHasta)       countQuery = countQuery.lte('fecha_inicio_garantia', filtros.fechaHasta);
-
-        const { count } = await countQuery;
+        // Sin ubicación: solo se muestra cuando no hay filtros activos
+        let sinUbicacionCount = 0;
+        if (!hayFiltros) {
+          const { count } = await supabase
+            .from('fianzas')
+            .select('zoho_id', { count: 'exact', head: true })
+            .is('lat', null);
+          sinUbicacionCount = count ?? 0;
+        }
 
         setFianzas(allData);
-        setSinUbicacion(count ?? 0);
+        setSinUbicacion(sinUbicacionCount);
       } catch (err) {
         setError(err.message);
       } finally {
