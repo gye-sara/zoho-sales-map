@@ -67,7 +67,7 @@ export default function FiltersInmo({ filtros, onChange, onClose }) {
       while (true) {
         const { data } = await supabase
           .from('inmobiliarias')
-          .select('comercial_garantiaya, billing_city')
+          .select('comercial_garantiaya')
           .not('lat', 'is', null)
           .range(page * 1000, (page + 1) * 1000 - 1);
         if (!data || data.length === 0) break;
@@ -84,19 +84,15 @@ export default function FiltersInmo({ filtros, onChange, onClose }) {
     [...new Set(todos.map(d => d.comercial_garantiaya).filter(Boolean))].sort()
   , [todos]);
 
-  const ciudades = useMemo(() =>
-    [...new Set(todos.map(d => d.billing_city).filter(Boolean))].sort()
-  , [todos]);
-
   const set = (key, value) => onChange({ ...filtros, [key]: value || undefined });
   const activeCount = Object.values(filtros).filter(Boolean).length;
 
   const style = {
-    wrap:  { width:'280px', background:'white', padding:'16px', height:'100%', overflowY:'auto' },
-    badge: { display:'inline-block', marginLeft:'6px', background:'#e0e7ff', color:'#3730a3', borderRadius:'10px', padding:'1px 6px', fontSize:'10px', fontWeight:600 },
-    btn:   { width:'100%', marginTop:'20px', padding:'9px', background:'#1a1a2e', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'13px', fontWeight:600 },
-    section: { marginTop:'16px', paddingTop:'14px', borderTop:'1px solid #f0f0f0' },
-    sectionTitle: { fontSize:'11px', fontWeight:700, color:'#1a1a2e', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' },
+    wrap:     { width:'280px', background:'white', padding:'16px', height:'100%', overflowY:'auto' },
+    badge:    { display:'inline-block', marginLeft:'6px', background:'#e0e7ff', color:'#3730a3', borderRadius:'10px', padding:'1px 6px', fontSize:'10px', fontWeight:600 },
+    btn:      { width:'100%', marginTop:'20px', padding:'9px', background:'#1a1a2e', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'13px', fontWeight:600 },
+    section:  { marginTop:'16px', paddingTop:'14px', borderTop:'1px solid #f0f0f0' },
+    title:    { fontSize:'11px', fontWeight:700, color:'#1a1a2e', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' },
     checkRow: { display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', cursor:'pointer' },
   };
 
@@ -110,26 +106,38 @@ export default function FiltersInmo({ filtros, onChange, onClose }) {
         <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'18px', color:'#999' }}>✕</button>
       </div>
 
-      <SearchSelect label="Comercial" value={filtros.comercial} onChange={v => set('comercial', v)} options={comerciales} placeholder="Todos los comerciales" />
-      <SearchSelect label="Ciudad" value={filtros.ciudad} onChange={v => set('ciudad', v)} options={ciudades} placeholder="Todas las ciudades" />
+      <SearchSelect
+        label="Comercial"
+        value={filtros.comercial}
+        onChange={v => set('comercial', v)}
+        options={comerciales}
+        placeholder="Todos los comerciales"
+      />
 
       <div style={style.section}>
-        <div style={style.sectionTitle}>Filtrar por actividad</div>
+        <div style={style.title}>Filtrar por actividad</div>
+
         <label style={style.checkRow}>
           <input type="checkbox" checked={!!filtros.conPolizas} onChange={e => set('conPolizas', e.target.checked ? 'true' : '')} />
           <span style={{ fontSize:'12px', color:'#333' }}>✅ Con pólizas vendidas</span>
         </label>
+
         <label style={style.checkRow}>
           <input type="checkbox" checked={!!filtros.conDeals} onChange={e => set('conDeals', e.target.checked ? 'true' : '')} />
           <span style={{ fontSize:'12px', color:'#333' }}>📋 Con cualquier deal</span>
         </label>
-        <label style={style.checkRow}>
+
+        {/* <label style={style.checkRow}>
           <input type="checkbox" checked={!!filtros.marca} onChange={e => set('marca', e.target.checked ? 'true' : '')} />
-          <span style={{ fontSize:'12px', color:'#333' }}>⭐ Marca</span>
-        </label>
+          <div>
+            <span style={{ fontSize:'12px', color:'#333' }}>⭐ Marca</span>
+            <span style={{ fontSize:'10px', color:'#999', display:'block' }}>Franquicias (RE/MAX, Century21...)</span>
+          </div>
+        </label> */}
+
         <label style={style.checkRow}>
           <input type="checkbox" checked={!!filtros.acuerdo} onChange={e => set('acuerdo', e.target.checked ? 'true' : '')} />
-          <span style={{ fontSize:'12px', color:'#333' }}>🤝 Acuerdo de colaboración</span>
+          <span style={{ fontSize:'12px', color:'#333' }}>🤝 Acuerdo de colaboración firmado</span>
         </label>
       </div>
 
