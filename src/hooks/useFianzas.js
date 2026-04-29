@@ -24,7 +24,7 @@ export function useFianzas(filtros = {}) {
               zoho_id, deal_name, id_garantia, nombre_contacto,
               nombre_inmobiliaria, comercial_garantiaya, analytics_agente,
               sucursal, provincia, ciudad, direccion_completa,
-              lat, lng, amount, alquiler, estado_contrato,
+              lat, lng, amount, alquiler, estado_contrato, stage,
               calidad_geocodificacion, fecha_inicio_garantia,
               fecha_finalizacion_garantia, closing_date,
               duracion_contrato_meses, tipo_alquiler, categoria_garantia,
@@ -33,6 +33,7 @@ export function useFianzas(filtros = {}) {
               impagos_notificaciones(id, name, fase, periodo_mes, periodo_ano, importe),
               impagos_legales(id, name, fase_legal, caso_activo, saldo_pendiente, saldo_recuperado)
             `)
+            .eq('stage', 'Póliza Vendida')
             .not('lat', 'is', null)
             .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
@@ -59,12 +60,12 @@ export function useFianzas(filtros = {}) {
         if (filtros.conNotificaciones) allData = allData.filter(f => f.impagos_notificaciones?.length > 0);
         if (filtros.conLegales)        allData = allData.filter(f => f.impagos_legales?.length > 0);
 
-        // Sin ubicación: solo se muestra cuando no hay filtros activos
         let sinUbicacionCount = 0;
         if (!hayFiltros) {
           const { count } = await supabase
             .from('fianzas')
             .select('zoho_id', { count: 'exact', head: true })
+            .eq('stage', 'Póliza Vendida')
             .is('lat', null);
           sinUbicacionCount = count ?? 0;
         }

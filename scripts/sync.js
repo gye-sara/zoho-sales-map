@@ -87,7 +87,7 @@ function generateWeekRanges(fromDate, toDate) {
 
 async function fetchRange(token, fields, dateFrom, dateTo) {
   const criteria = encodeURIComponent(
-    `((Stage:equals:P\u00f3liza Vendida)and(Closing_Date:between:${dateFrom},${dateTo}))`
+    `(Closing_Date:between:${dateFrom},${dateTo})`
   );
   let results = [];
   let page = 1;
@@ -105,6 +105,7 @@ async function fetchRange(token, fields, dateFrom, dateTo) {
 
     if (!data || data.status === 'error') {
       if (data?.code === 'LIMIT_REACHED') return { results, limitReached: true };
+      if (data?.code === 'NO_DATA') break;
       break;
     }
     if (!data.data || data.data.length === 0) break;
@@ -175,7 +176,6 @@ async function geocode(address) {
   }
 }
 
-// ── Mapeo SIN lat/lng/geocodificado — esos se preservan del upsert ──
 function mapDeal(d) {
   return {
     zoho_id:                             d.id,
@@ -188,6 +188,7 @@ function mapDeal(d) {
     arrendatario_principal:              d.Arrendatario_Principal?.name ?? null,
     arrendador:                          d.Arrendador?.name ?? null,
     nombre_inmobiliaria:                 d.Account_Name?.name ?? null,
+    inmobiliaria_zoho_id:                d.Account_Name?.id ?? null,  // ← FK a inmobiliarias
     agente_inmobiliario:                 d.Agente_Inmobiliario?.name ?? null,
     comercial_garantiaya:                d.Comercial_GarantiaYa,
     correo_comercial:                    d.Correo_Comercial,
@@ -236,40 +237,41 @@ function mapDeal(d) {
     forma_de_pago:                       d.Forma_de_Pago,
     zoho_modified_time:                  d.Modified_Time ?? null,
     synced_at:                           new Date().toISOString(),
-    // ⚠️ lat, lng, geocodificado y calidad_geocodificacion NO se incluyen aquí
-    // para no sobreescribir los valores ya guardados
   };
 }
 
 async function upsertBatch(rows) {
   const { error } = await supabase
     .from('fianzas')
-    .upsert(rows, {
-      onConflict: 'zoho_id',
-      ignoreDuplicates: false,
-    });
+    .upsert(rows, { onConflict: 'zoho_id', ignoreDuplicates: false });
   if (error) throw new Error(`Supabase upsert error: ${error.message}`);
 }
 
 async function geocodeNuevos(deals) {
-  // Solo geocodificar los que NO tienen coordenadas aún
   const zohoIds = deals.map(d => d.id);
 
-  // Consultar cuáles ya tienen lat en Supabase
   const { data: existentes } = await supabase
     .from('fianzas')
-    .select('zoho_id')
-    .in('zoho_id', zohoIds)
-    .not('lat', 'is', null);
+    .select('zoho_id, lat, direccion_completa')
+    .in('zoho_id', zohoIds);
 
-  const yaGeocodificados = new Set((existentes ?? []).map(r => r.zoho_id));
-  const pendientes = deals.filter(d => !yaGeocodificados.has(d.id));
+  const existMap = {};
+  (existentes ?? []).forEach(r => { existMap[r.zoho_id] = r; });
+
+  const pendientes = deals.filter(d => {
+    if (d.Stage !== 'Póliza Vendida') return false;
+    const actual = existMap[d.id];
+    if (!actual) return true;
+    if (!actual.lat) return true;
+    const dirZoho = d.Direccion_Propiedad?.trim() ?? null;
+    const dirSupa = actual.direccion_completa?.trim() ?? null;
+    return dirZoho && dirZoho !== dirSupa;
+  });
 
   if (pendientes.length === 0) return 0;
+  console.log(`\n🗺️  Geocodificando ${pendientes.length} deals...`);
 
-  console.log(`🗺️  Geocodificando ${pendientes.length} nuevos...`);
   let count = 0;
-
   for (const deal of pendientes) {
     const { address, calidad } = buildAddress(deal);
     if (!address) {
@@ -278,20 +280,23 @@ async function geocodeNuevos(deals) {
         .eq('zoho_id', deal.id);
       continue;
     }
-
     const { lat, lng } = await geocode(address);
     await supabase.from('fianzas')
-      .update({ lat, lng, geocodificado: lat !== null, calidad_geocodificacion: calidad })
+      .update({
+        lat,
+        lng,
+        geocodificado:           lat !== null,
+        calidad_geocodificacion: calidad,
+        direccion_completa:      deal.Direccion_Propiedad ?? null,
+      })
       .eq('zoho_id', deal.id);
-
     if (lat) count++;
   }
-
   return count;
 }
 
 async function main() {
-  console.log('🚀 Iniciando sync Zoho → Supabase');
+  console.log('🚀 Iniciando sync Zoho → Supabase (todos los stages)');
   const token = await getAccessToken();
 
   const START_DATE = '2020-01-01';
@@ -318,7 +323,6 @@ async function main() {
       .filter(d => !seenIds.has(d.id))
       .map(d => { seenIds.add(d.id); return { ...d, ...(extraMap[d.id] ?? {}) }; });
 
-    // 1. Guardar datos de Zoho SIN tocar lat/lng
     const rows = deals.map(mapDeal);
     const BATCH_SIZE = 100;
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
@@ -326,7 +330,6 @@ async function main() {
     }
     totalSaved += rows.length;
 
-    // 2. Geocodificar solo los nuevos (sin coordenadas)
     const geocodedCount = await geocodeNuevos(deals);
     totalGeocoded += geocodedCount;
 
