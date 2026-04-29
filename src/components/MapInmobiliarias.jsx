@@ -16,10 +16,10 @@ const fmtD = (d) => { if (!d) return null; const [y,m,day] = d.split('-'); retur
 async function fetchFianzas(inmobiliariaZohoId) {
   const { data } = await supabase
     .from('fianzas')
-    .select('deal_name, stage, alquiler, amount, categoria_garantia, estado_contrato, closing_date, direccion_completa, ciudad')
+    .select('deal_name, stage, alquiler, amount, categoria_garantia, estado_contrato, closing_date, sucursal, direccion_completa, ciudad')
     .eq('inmobiliaria_zoho_id', inmobiliariaZohoId)
     .order('closing_date', { ascending: false })
-    .limit(50);
+    .limit(200);
   return data ?? [];
 }
 
@@ -40,16 +40,16 @@ function buildPopup(inmo, fianzas) {
         <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(f.deal_name)}</span>
         <span style="font-size:10px;background:${stageColor(f.stage)}22;color:${stageColor(f.stage)};padding:1px 6px;border-radius:10px;font-weight:600;white-space:nowrap;">${esc(f.stage)}</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px;">
-        ${f.categoria_garantia ? `<span style="font-size:10px;background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:8px;text-align:center;">${esc(f.categoria_garantia)}</span>` : '<span></span>'}
-        ${f.estado_contrato ? `<span style="font-size:10px;background:#f0fdf4;color:#166534;padding:1px 6px;border-radius:8px;text-align:center;">${esc(f.estado_contrato)}</span>` : '<span></span>'}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+        <span style="font-size:10px;background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:8px;">${esc(f.categoria_garantia ?? '—')}</span>
+        <span style="font-size:10px;background:#f0fdf4;color:#166534;padding:1px 6px;border-radius:8px;">${esc(f.estado_contrato ?? '—')}</span>
+        ${f.sucursal ? `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;">${esc(f.sucursal)}</span>` : ''}
       </div>
-      <div style="display:flex;justify-content:space-between;margin-top:4px;">
+      <div style="display:flex;justify-content:space-between;">
         <span style="font-size:10px;color:#666;">Alquiler: <strong>${fmt(f.alquiler)}/mes</strong></span>
         <span style="font-size:10px;color:#666;">Garantía: <strong>${fmt(f.amount)}</strong></span>
       </div>
       ${fmtD(f.closing_date) ? `<div style="font-size:10px;color:#bbb;margin-top:2px;">Cierre: ${fmtD(f.closing_date)}</div>` : ''}
-      ${f.direccion_completa ? `<div style="font-size:10px;color:#aaa;margin-top:2px;">📍 ${esc(f.direccion_completa.slice(0, 60))}${f.direccion_completa.length > 60 ? '...' : ''}</div>` : ''}
     </div>
   `).join('');
 
@@ -59,40 +59,22 @@ function buildPopup(inmo, fianzas) {
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;width:360px;padding:14px 16px;">
       <div style="background:#1a1a2e;padding:12px 14px;margin:-14px -16px 12px;border-radius:4px 4px 0 0;">
         <div style="color:white;font-size:14px;font-weight:700;margin-bottom:2px;padding-right:24px;">${esc(inmo.account_name)}</div>
-        ${address ? `<div style="color:#94a3b8;font-size:11px;">${esc(address)}</div>` : ''}
+        <div style="color:#94a3b8;font-size:11px;">${esc(address || '—')}</div>
       </div>
 
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0;">
-        ${inmo.comercial_garantiaya ? `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Comercial</span>
-          <span style="font-size:11px;color:#222;font-weight:500;">${esc(inmo.comercial_garantiaya)}</span>
-        </div>` : ''}
-        ${inmo.email ? `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Email</span>
-          <span style="font-size:11px;color:#222;max-width:220px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(inmo.email)}</span>
-        </div>` : ''}
-        ${inmo.comision ? `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Comisión</span>
-          <span style="font-size:11px;color:#222;">${esc(inmo.comision)}%</span>
-        </div>` : ''}
-        ${inmo.website ? `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Web</span>
-          <a href="${esc(inmo.website)}" target="_blank" style="font-size:11px;color:#6366f1;max-width:220px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(inmo.website)}</a>
-        </div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0;">
+        <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Comercial</span>
+        <span style="font-size:12px;color:#1a1a2e;font-weight:600;">${esc(inmo.comercial_garantiaya ?? '—')}</span>
       </div>
 
       <div style="display:flex;gap:8px;margin-bottom:12px;">
         <div style="flex:1;background:#f0fdf4;border-radius:8px;padding:10px;text-align:center;">
           <div style="font-size:22px;font-weight:700;color:#10b981;">${inmo.total_polizas ?? 0}</div>
-          <div style="font-size:10px;color:#666;margin-top:2px;">Pólizas vendidas</div>
+          <div style="font-size:10px;color:#666;margin-top:2px;">Pólizas</div>
         </div>
-        <div style="flex:1;background:#ede9fe;border-radius:8px;padding:10px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:#6366f1;">${inmo.total_deals ?? 0}</div>
-          <div style="font-size:10px;color:#666;margin-top:2px;">Total deals</div>
+        <div style="flex:1;background:#fee2e2;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:#ef4444;">${(inmo.total_deals ?? 0) - (inmo.total_polizas ?? 0)}</div>
+          <div style="font-size:10px;color:#666;margin-top:2px;">Perdidos</div>
         </div>
         <div style="flex:1;background:#fef3c7;border-radius:8px;padding:10px;text-align:center;">
           <div style="font-size:13px;font-weight:700;color:#d97706;margin-top:4px;">${fmt(inmo.total_amount)}</div>
@@ -114,6 +96,11 @@ function buildPopup(inmo, fianzas) {
           📋 Otros deals — ${otros.length}
         </div>
         ${fianzaRows(otros)}
+      </div>` : ''}
+
+      ${fianzas.length === 0 ? `
+      <div style="text-align:center;padding:20px;color:#999;font-size:12px;">
+        Sin deals asociados
       </div>` : ''}
     </div>
   `;
@@ -184,7 +171,7 @@ export default function MapInmobiliarias({ inmobiliarias, stats, filtersOpen }) 
 
       marker.on('click', async () => {
         const fianzas = await fetchFianzas(inmo.zoho_id);
-        marker.bindPopup(buildPopup(inmo, fianzas), { maxWidth: 440 }).openPopup();
+        marker.bindPopup(buildPopup(inmo, fianzas), { maxWidth: 400 }).openPopup();
       });
 
       cluster.addLayer(marker);
