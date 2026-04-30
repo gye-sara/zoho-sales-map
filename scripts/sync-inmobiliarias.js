@@ -38,14 +38,31 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-async function fetchAllInmobiliarias(token) {
+async function getLastSyncDate() {
+  const { data } = await supabase
+    .from('inmobiliarias')
+    .select('synced_at')
+    .order('synced_at', { ascending: false })
+    .limit(1);
+
+  if (data && data.length > 0) {
+    const lastSync = new Date(data[0].synced_at);
+    lastSync.setHours(lastSync.getHours() - 1);
+    return lastSync.toISOString().replace('T', ' ').substring(0, 19);
+  }
+  return '2020-01-01 00:00:00';
+}
+
+async function fetchModifiedInmobiliarias(token, since) {
   const results = {};
   let offset    = 0;
   let hasMore   = true;
   const LIMIT   = 200;
 
+  console.log(`📅 Trayendo inmobiliarias modificadas desde: ${since}`);
+
   while (hasMore) {
-    const query = `select ${COQL_FIELDS} from Accounts where id > '0' limit ${LIMIT} offset ${offset}`;
+    const query = `select ${COQL_FIELDS} from Accounts where Modified_Time >= '${since}' limit ${LIMIT} offset ${offset}`;
     try {
       const res  = await fetch('https://www.zohoapis.eu/crm/v7/coql', {
         method: 'POST',
@@ -58,7 +75,7 @@ async function fetchAllInmobiliarias(token) {
       const data = await res.json();
 
       if (data.code && data.code !== 'SUCCESS') {
-        console.error(`\n❌ Error COQL offset ${offset}:`, data.code, data.message);
+        console.error(`\n❌ Error COQL:`, data.code, data.message);
         break;
       }
 
@@ -70,12 +87,12 @@ async function fetchAllInmobiliarias(token) {
       console.error(`\n❌ Error offset ${offset}:`, e.message);
       break;
     }
-    process.stdout.write(`\r📦 ${Object.keys(results).length} inmobiliarias obtenidas...`);
+    process.stdout.write(`\r📦 ${Object.keys(results).length} inmobiliarias modificadas...`);
     await new Promise(r => setTimeout(r, 250));
   }
 
-  console.log(`\n✅ Total inmobiliarias en Zoho: ${Object.keys(results).length}`);
-  return results;
+  console.log(`\n✅ ${Object.keys(results).length} inmobiliarias modificadas desde ${since}`);
+  return Object.values(results);
 }
 
 async function getDealsStats() {
@@ -181,40 +198,58 @@ async function upsertBatch(rows) {
 }
 
 async function main() {
-  console.log('🚀 Iniciando sync completo Inmobiliarias → Supabase');
+  console.log('🚀 Iniciando sync incremental Inmobiliarias → Supabase');
   const token = await getAccessToken();
 
-  console.log('📦 Trayendo todas las inmobiliarias de Zoho via COQL...');
-  const inmoMap = await fetchAllInmobiliarias(token);
-  const ids     = Object.keys(inmoMap);
+  const since         = await getLastSyncDate();
+  const inmobiliarias = await fetchModifiedInmobiliarias(token, since);
 
-  if (ids.length === 0) {
-    console.log('⚠️  No se encontraron inmobiliarias');
+  if (inmobiliarias.length === 0) {
+    console.log('✅ No hay inmobiliarias modificadas desde el último sync');
+    // Aun así recalcular stats porque pueden haber cambiado deals
+    console.log('📊 Recalculando stats de deals...');
+    const stats = await getDealsStats();
+    const { data: todas } = await supabase
+      .from('inmobiliarias')
+      .select('zoho_id');
+
+    const rows = (todas ?? []).map(i => ({
+      zoho_id:      i.zoho_id,
+      total_deals:  stats[i.zoho_id]?.total_deals  ?? 0,
+      total_polizas: stats[i.zoho_id]?.total_polizas ?? 0,
+      total_amount:  stats[i.zoho_id]?.total_amount  ?? 0,
+      synced_at:    new Date().toISOString(),
+    }));
+
+    const BATCH = 100;
+    for (let i = 0; i < rows.length; i += BATCH) {
+      await upsertBatch(rows.slice(i, i + BATCH));
+    }
+    console.log(`✅ Stats actualizadas para ${rows.length} inmobiliarias`);
     return;
   }
 
   console.log('📊 Calculando stats de deals...');
   const stats = await getDealsStats();
-  console.log(`✅ Stats de ${Object.keys(stats).length} inmobiliarias con deals`);
 
+  // Traer las ya geocodificadas
+  const zohoIds = inmobiliarias.map(d => d.id);
   const { data: yaGeocoded } = await supabase
     .from('inmobiliarias')
     .select('zoho_id, lat, billing_street')
+    .in('zoho_id', zohoIds)
     .not('lat', 'is', null);
 
   const geocodedMap = {};
   (yaGeocoded ?? []).forEach(r => { geocodedMap[r.zoho_id] = r; });
-  console.log(`📍 ${Object.keys(geocodedMap).length} ya geocodificadas en Supabase`);
 
   let geocodedCount = 0;
-  let savedCount    = 0;
   const rows        = [];
 
-  for (const zohoId of ids) {
-    const inmo     = inmoMap[zohoId];
+  for (const inmo of inmobiliarias) {
     const row      = mapInmobiliaria(inmo, stats);
     const address  = buildAddress(inmo);
-    const existing = geocodedMap[zohoId];
+    const existing = geocodedMap[inmo.id];
 
     const dirCambio       = existing && address &&
                             existing.billing_street?.trim() !== inmo.Billing_Street?.trim();
@@ -236,28 +271,14 @@ async function main() {
     }
 
     rows.push(row);
-    savedCount++;
-
-    if (rows.length >= 100) {
-      await upsertBatch(rows.splice(0));
-      process.stdout.write(`\r💾 ${savedCount}/${ids.length} guardadas, ${geocodedCount} nuevas geocodificadas...`);
-    }
   }
 
-  if (rows.length > 0) await upsertBatch(rows);
+  const BATCH = 100;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    await upsertBatch(rows.slice(i, i + BATCH));
+  }
 
-  console.log(`\n✅ Sync completado — ${savedCount} inmobiliarias, ${geocodedCount} nuevas geocodificaciones`);
-
-  const { count: total } = await supabase
-    .from('inmobiliarias')
-    .select('*', { count: 'exact', head: true });
-
-  const { count: conLat } = await supabase
-    .from('inmobiliarias')
-    .select('*', { count: 'exact', head: true })
-    .not('lat', 'is', null);
-
-  console.log(`📊 Total en Supabase: ${total} | Con coordenadas: ${conLat}`);
+  console.log(`✅ ${rows.length} inmobiliarias actualizadas, ${geocodedCount} geocodificaciones`);
 }
 
 main().catch(err => {

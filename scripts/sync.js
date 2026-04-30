@@ -43,14 +43,35 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-async function fetchAllDeals(token) {
+// Obtener la fecha del último sync desde Supabase
+async function getLastSyncDate() {
+  const { data } = await supabase
+    .from('fianzas')
+    .select('synced_at')
+    .order('synced_at', { ascending: false })
+    .limit(1);
+
+  if (data && data.length > 0) {
+    // Restar 1 hora para cubrir solapamientos
+    const lastSync = new Date(data[0].synced_at);
+    lastSync.setHours(lastSync.getHours() - 1);
+    return lastSync.toISOString().replace('T', ' ').substring(0, 19);
+  }
+
+  // Si no hay registros, sync completo desde 2020
+  return '2020-01-01 00:00:00';
+}
+
+async function fetchModifiedDeals(token, since) {
   const results = {};
   let offset    = 0;
   let hasMore   = true;
   const LIMIT   = 200;
 
+  console.log(`📅 Trayendo deals modificados desde: ${since}`);
+
   while (hasMore) {
-    const query = `select ${COQL_FIELDS} from Deals where id > '0' limit ${LIMIT} offset ${offset}`;
+    const query = `select ${COQL_FIELDS} from Deals where Modified_Time >= '${since}' limit ${LIMIT} offset ${offset}`;
     try {
       const res  = await fetch('https://www.zohoapis.eu/crm/v7/coql', {
         method: 'POST',
@@ -63,7 +84,7 @@ async function fetchAllDeals(token) {
       const data = await res.json();
 
       if (data.code && data.code !== 'SUCCESS') {
-        console.error(`\n❌ Error COQL offset ${offset}:`, data.code, data.message);
+        console.error(`\n❌ Error COQL:`, data.code, data.message);
         break;
       }
 
@@ -75,12 +96,12 @@ async function fetchAllDeals(token) {
       console.error(`\n❌ Error offset ${offset}:`, e.message);
       break;
     }
-    process.stdout.write(`\r📦 ${Object.keys(results).length} deals obtenidos...`);
+    process.stdout.write(`\r📦 ${Object.keys(results).length} deals modificados...`);
     await new Promise(r => setTimeout(r, 250));
   }
 
-  console.log(`\n✅ Total deals en Zoho: ${Object.keys(results).length}`);
-  return results;
+  console.log(`\n✅ ${Object.keys(results).length} deals modificados desde ${since}`);
+  return Object.values(results);
 }
 
 function esCatastro(str) {
@@ -233,51 +254,36 @@ async function geocodeNuevos(deals) {
 }
 
 async function main() {
-  console.log('🚀 Iniciando sync completo Deals → Supabase (todos los stages via COQL)');
+  console.log('🚀 Iniciando sync incremental Deals → Supabase');
   const token = await getAccessToken();
 
-  console.log('📦 Trayendo todos los deals de Zoho via COQL...');
-  const dealsMap = await fetchAllDeals(token);
-  const deals    = Object.values(dealsMap);
+  const since = await getLastSyncDate();
+  const deals = await fetchModifiedDeals(token, since);
 
   if (deals.length === 0) {
-    console.log('⚠️  No se encontraron deals');
+    console.log('✅ No hay deals modificados desde el último sync');
     return;
   }
 
-  // Upsert en lotes de 100
-  let savedCount = 0;
-  const BATCH    = 100;
-  const rows     = deals.map(mapDeal);
+  const rows  = deals.map(mapDeal);
+  const BATCH = 100;
+  let saved   = 0;
 
   for (let i = 0; i < rows.length; i += BATCH) {
     await upsertBatch(rows.slice(i, i + BATCH));
-    savedCount += Math.min(BATCH, rows.length - i);
-    process.stdout.write(`\r💾 ${savedCount}/${rows.length} guardados...`);
+    saved += Math.min(BATCH, rows.length - i);
+    process.stdout.write(`\r💾 ${saved}/${rows.length} guardados...`);
   }
+  console.log(`\n✅ ${saved} deals actualizados`);
 
-  console.log(`\n✅ ${savedCount} deals guardados`);
-
-  // Geocodificar nuevos o con dirección cambiada
-  const geocodedCount = await geocodeNuevos(deals);
-  console.log(`🗺️  ${geocodedCount} nuevas geocodificaciones`);
+  const geocoded = await geocodeNuevos(deals);
+  if (geocoded > 0) console.log(`🗺️  ${geocoded} nuevas geocodificaciones`);
 
   // Resumen
-  const { count: total } = await supabase
+  const { count } = await supabase
     .from('fianzas')
     .select('*', { count: 'exact', head: true });
-
-  const { data: stages } = await supabase
-    .from('fianzas')
-    .select('stage')
-    .then(async ({ data }) => {
-      const counts = {};
-      (data ?? []).forEach(d => { counts[d.stage] = (counts[d.stage] ?? 0) + 1; });
-      return { data: counts };
-    });
-
-  console.log(`\n📊 Total en Supabase: ${total}`);
-  console.log('📋 Por stage:', JSON.stringify(stages, null, 2));
+  console.log(`📊 Total en Supabase: ${count}`);
 }
 
 main().catch(err => {
