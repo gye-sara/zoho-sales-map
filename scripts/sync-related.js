@@ -77,8 +77,13 @@ async function fetchModified(token, module, fields, since) {
 
 async function upsert(table, rows, conflict) {
   if (rows.length === 0) return;
-  const { error } = await supabase.from(table).upsert(rows, { onConflict: conflict });
-  if (error) throw new Error(`${table} upsert error: ${error.message}`);
+  const BATCH = 100;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const { error } = await supabase
+      .from(table)
+      .upsert(rows.slice(i, i + BATCH), { onConflict: conflict });
+    if (error) throw new Error(`${table} upsert error: ${error.message}`);
+  }
 }
 
 async function main() {
@@ -87,45 +92,66 @@ async function main() {
   const since = await getLastSyncDate();
   console.log(`📅 Sincronizando cambios desde: ${since.toUTCString()}`);
 
+  // Renovaciones
   const rens = await fetchModified(token, 'Renovaciones',
     'id,Name,Stage,Renovacion_N,Closing_Date,Amount,Estado_del_Contrato,id_ticket_fianzas,Modified_Time', since);
   console.log(`🔄 ${rens.length} renovaciones modificadas`);
   await upsert('renovaciones', rens.map(r => ({
-    id: r.id, fianza_zoho_id: r.id_ticket_fianzas?.id ?? null,
-    name: r.Name, stage: r.Stage, renovacion_n: r.Renovacion_N,
-    closing_date: r.Closing_Date ?? null, amount: r.Amount,
-    estado_contrato: r.Estado_del_Contrato, synced_at: new Date().toISOString(),
-  })), 'id');
+    zoho_id:         r.id,
+    fianza_zoho_id:  r.id_ticket_fianzas?.id ?? null,
+    name:            r.Name,
+    stage:           r.Stage,
+    renovacion_n:    r.Renovacion_N,
+    closing_date:    r.Closing_Date ?? null,
+    amount:          r.Amount,
+    estado_contrato: r.Estado_del_Contrato,
+    synced_at:       new Date().toISOString(),
+  })), 'zoho_id');
 
+  // Recuperos
   const recs = await fetchModified(token, 'Impagos_Recuperos',
     'id,Name,Fase,Total_Reclamos,Saldo_Pendiente,Total_Pagado,id_ticket_fianzas,Modified_Time', since);
   console.log(`⚠️  ${recs.length} recuperos modificados`);
   await upsert('impagos_recupero', recs.map(r => ({
-    id: r.id, fianza_zoho_id: r.id_ticket_fianzas?.id ?? null,
-    name: r.Name, fase: r.Fase, total_reclamos: r.Total_Reclamos,
-    saldo_pendiente: r.Saldo_Pendiente, total_pagado: r.Total_Pagado,
-    synced_at: new Date().toISOString(),
-  })), 'id');
+    zoho_id:         r.id,
+    fianza_zoho_id:  r.id_ticket_fianzas?.id ?? null,
+    name:            r.Name,
+    fase:            r.Fase,
+    total_reclamos:  r.Total_Reclamos,
+    saldo_pendiente: r.Saldo_Pendiente,
+    total_pagado:    r.Total_Pagado,
+    synced_at:       new Date().toISOString(),
+  })), 'zoho_id');
 
+  // Notificaciones
   const nots = await fetchModified(token, 'Impagos_Notificaciones',
     'id,Name,Fase,Periodo_Mes,Periodo_A_o,Importe,id_ticket_fianzas,Modified_Time', since);
   console.log(`📋 ${nots.length} notificaciones modificadas`);
   await upsert('impagos_notificaciones', nots.map(n => ({
-    id: n.id, fianza_zoho_id: n.id_ticket_fianzas?.id ?? null,
-    name: n.Name, fase: n.Fase, periodo_mes: n.Periodo_Mes,
-    periodo_ano: n.Periodo_A_o, importe: n.Importe,
-    synced_at: new Date().toISOString(),
-  })), 'id');
+    zoho_id:        n.id,
+    fianza_zoho_id: n.id_ticket_fianzas?.id ?? null,
+    name:           n.Name,
+    fase:           n.Fase,
+    periodo_mes:    n.Periodo_Mes,
+    periodo_ano:    n.Periodo_A_o,
+    importe:        n.Importe,
+    synced_at:      new Date().toISOString(),
+  })), 'zoho_id');
 
+  // Legales
   const legs = await fetchModified(token, 'Impagos_Legales',
     'id,Name,Fase_Legal,Caso_Activo,Saldo_Pendiente,Saldo_Recuperado,Fianzas,Modified_Time', since);
   console.log(`⚖️  ${legs.length} legales modificados`);
   await upsert('impagos_legales', legs.map(l => ({
-    id: l.id, fianza_zoho_id: l.Fianzas?.id ?? null,
-    name: l.Name, fase_legal: l.Fase_Legal, caso_activo: l.Caso_Activo ?? false,
-    saldo_pendiente: l.Saldo_Pendiente, saldo_recuperado: l.Saldo_Recuperado,
-    synced_at: new Date().toISOString(),
-  })), 'id');
+    zoho_id:          l.id,
+    fianza_zoho_id:   l.Fianzas?.id ?? null,
+    name:             l.Name,
+    fase_legal:       l.Fase_Legal,
+    caso_activo:      l.Caso_Activo ?? false,
+    saldo_pendiente:  l.Saldo_Pendiente,
+    saldo_recuperado: l.Saldo_Recuperado,
+    synced_at:        new Date().toISOString(),
+  })), 'zoho_id');
 
   console.log('✅ Sync incremental módulos relacionados completado');
 }
