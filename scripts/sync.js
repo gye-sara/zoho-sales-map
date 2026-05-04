@@ -12,7 +12,7 @@ const GOOGLE_MAPS_KEY      = process.env.GOOGLE_MAPS_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const COQL_FIELDS = [
+const FIELDS = [
   'id', 'Deal_Name', 'Id_Garantia', 'Id_Garantia_auto', 'Categoria_de_Garantia',
   'num_fant', 'Contact_Name', 'Arrendatario_Principal', 'Arrendador',
   'Account_Name', 'Agente_Inmobiliario', 'Comercial_GarantiaYa',
@@ -24,7 +24,7 @@ const COQL_FIELDS = [
   'Closing_Date', 'Fecha_Inicio_de_Garantia', 'Fecha_Finalizacion_de_Garantia',
   'Fecha_Fase', 'Modified_Time', 'Direccion', 'Ciudad', 'Provincia',
   'Codigo_Postal', 'Direccion_Propiedad',
-].join(', ');
+].join(',');
 
 async function getAccessToken() {
   const res = await fetch('https://accounts.zoho.eu/oauth/v2/token', {
@@ -43,7 +43,6 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-// Obtener la fecha del último sync desde Supabase
 async function getLastSyncDate() {
   const { data } = await supabase
     .from('fianzas')
@@ -52,55 +51,49 @@ async function getLastSyncDate() {
     .limit(1);
 
   if (data && data.length > 0) {
-    // Restar 1 hora para cubrir solapamientos
     const lastSync = new Date(data[0].synced_at);
     lastSync.setHours(lastSync.getHours() - 1);
-    return lastSync.toISOString().replace('T', ' ').substring(0, 19);
+    return lastSync;
   }
-
-  // Si no hay registros, sync completo desde 2020
-  return '2020-01-01 00:00:00';
+  return new Date('2020-01-01T00:00:00Z');
 }
 
 async function fetchModifiedDeals(token, since) {
   const results = {};
-  let offset    = 0;
+  let page      = 1;
   let hasMore   = true;
-  const LIMIT   = 200;
+  const sinceStr = since.toUTCString();
 
-  console.log(`📅 Trayendo deals modificados desde: ${since}`);
+  console.log(`📅 Trayendo deals modificados desde: ${sinceStr}`);
 
   while (hasMore) {
-    const query = `select ${COQL_FIELDS} from Deals where Modified_Time >= '${since}' limit ${LIMIT} offset ${offset}`;
+    const url = `https://www.zohoapis.eu/crm/v7/Deals?fields=${FIELDS}&per_page=200&page=${page}`;
     try {
-      const res  = await fetch('https://www.zohoapis.eu/crm/v7/coql', {
-        method: 'POST',
+      const res  = await fetch(url, {
         headers: {
           Authorization: `Zoho-oauthtoken ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ select_query: query }),
+          'If-Modified-Since': sinceStr,
+        }
       });
-      const data = await res.json();
 
-      if (data.code && data.code !== 'SUCCESS') {
-        console.error(`\n❌ Error COQL:`, data.code, data.message);
-        break;
-      }
+      if (res.status === 304) { console.log('\n✅ Sin cambios desde el último sync'); break; }
 
+      const text = await res.text();
+      if (!text || text.trim() === '') break;
+      const data = JSON.parse(text);
       if (!data.data || data.data.length === 0) break;
       data.data.forEach(d => { results[d.id] = d; });
       hasMore = data.info?.more_records ?? false;
-      offset += LIMIT;
+      page++;
     } catch (e) {
-      console.error(`\n❌ Error offset ${offset}:`, e.message);
+      console.error(`\n❌ Error página ${page}:`, e.message);
       break;
     }
     process.stdout.write(`\r📦 ${Object.keys(results).length} deals modificados...`);
     await new Promise(r => setTimeout(r, 250));
   }
 
-  console.log(`\n✅ ${Object.keys(results).length} deals modificados desde ${since}`);
+  console.log(`\n✅ ${Object.keys(results).length} deals modificados`);
   return Object.values(results);
 }
 
@@ -149,52 +142,52 @@ async function geocode(address) {
 
 function mapDeal(d) {
   return {
-    zoho_id:                             d.id,
-    deal_name:                           d.Deal_Name,
-    id_garantia:                         d.Id_Garantia,
-    id_garantia_auto:                    d.Id_Garantia_auto,
-    categoria_garantia:                  d.Categoria_de_Garantia,
-    num_fant:                            d.num_fant,
-    nombre_contacto:                     d.Contact_Name?.name ?? null,
-    arrendatario_principal:              d.Arrendatario_Principal?.name ?? null,
-    arrendador:                          d.Arrendador?.name ?? null,
-    nombre_inmobiliaria:                 d.Account_Name?.name ?? null,
-    inmobiliaria_zoho_id:                d.Account_Name?.id ?? null,
-    agente_inmobiliario:                 d.Agente_Inmobiliario?.name ?? null,
-    comercial_garantiaya:                d.Comercial_GarantiaYa,
-    correo_comercial:                    d.Correo_Comercial,
-    analytics_agente:                    d.Analytics_Agente,
-    sucursal:                            d.Sucursal,
-    gestor_riesgo:                       d.Gestor_Riesgo,
-    owner:                               d.Owner?.name ?? null,
-    stage:                               d.Stage,
-    estado_contrato:                     d.Estado_del_Contrato,
-    renta_activa:                        d.Renta_Activa ?? false,
-    resolucion_riesgo:                   d.Resolucion_Riesgo,
-    cotizacion:                          d.Cotizacion,
-    documentacion:                       d.Documentacion,
-    comision:                            d.Comision,
-    tipo_firma:                          d.Tipo_de_Firma,
-    contratante:                         d.Contratante,
-    amount:                              d.Amount,
-    precio_final:                        d.Precio_Final,
-    alquiler:                            d.Alquiler,
-    alquiler_total:                      d.Alquiler_Total,
-    monto_aprobado:                      d.Monto_Aprobado,
-    tipo_alquiler:                       d.Tipo_de_Alquiler,
-    tipo_duracion:                       d.Tipo_de_Duracion,
-    duracion_contrato_meses:             d.Duracion_de_Contrato_Meses,
-    closing_date:                        d.Closing_Date ?? null,
-    fecha_inicio_garantia:               d.Fecha_Inicio_de_Garantia ?? null,
-    fecha_finalizacion_garantia:         d.Fecha_Finalizacion_de_Garantia ?? null,
-    fecha_fase:                          d.Fecha_Fase ?? null,
-    direccion:                           d.Direccion,
-    ciudad:                              d.Ciudad,
-    provincia:                           d.Provincia,
-    codigo_postal:                       d.Codigo_Postal,
-    direccion_completa:                  d.Direccion_Propiedad,
-    zoho_modified_time:                  d.Modified_Time ?? null,
-    synced_at:                           new Date().toISOString(),
+    zoho_id:                     d.id,
+    deal_name:                   d.Deal_Name,
+    id_garantia:                 d.Id_Garantia,
+    id_garantia_auto:            d.Id_Garantia_auto,
+    categoria_garantia:          d.Categoria_de_Garantia,
+    num_fant:                    d.num_fant,
+    nombre_contacto:             d.Contact_Name?.name ?? null,
+    arrendatario_principal:      d.Arrendatario_Principal?.name ?? null,
+    arrendador:                  d.Arrendador?.name ?? null,
+    nombre_inmobiliaria:         d.Account_Name?.name ?? null,
+    inmobiliaria_zoho_id:        d.Account_Name?.id ?? null,
+    agente_inmobiliario:         d.Agente_Inmobiliario?.name ?? null,
+    comercial_garantiaya:        d.Comercial_GarantiaYa,
+    correo_comercial:            d.Correo_Comercial,
+    analytics_agente:            d.Analytics_Agente,
+    sucursal:                    d.Sucursal,
+    gestor_riesgo:               d.Gestor_Riesgo,
+    owner:                       d.Owner?.name ?? null,
+    stage:                       d.Stage,
+    estado_contrato:             d.Estado_del_Contrato,
+    renta_activa:                d.Renta_Activa ?? false,
+    resolucion_riesgo:           d.Resolucion_Riesgo,
+    cotizacion:                  d.Cotizacion,
+    documentacion:               d.Documentacion,
+    comision:                    d.Comision,
+    tipo_firma:                  d.Tipo_de_Firma,
+    contratante:                 d.Contratante,
+    amount:                      d.Amount,
+    precio_final:                d.Precio_Final,
+    alquiler:                    d.Alquiler,
+    alquiler_total:              d.Alquiler_Total,
+    monto_aprobado:              d.Monto_Aprobado,
+    tipo_alquiler:               d.Tipo_de_Alquiler,
+    tipo_duracion:               d.Tipo_de_Duracion,
+    duracion_contrato_meses:     d.Duracion_de_Contrato_Meses,
+    closing_date:                d.Closing_Date ?? null,
+    fecha_inicio_garantia:       d.Fecha_Inicio_de_Garantia ?? null,
+    fecha_finalizacion_garantia: d.Fecha_Finalizacion_de_Garantia ?? null,
+    fecha_fase:                  d.Fecha_Fase ?? null,
+    direccion:                   d.Direccion,
+    ciudad:                      d.Ciudad,
+    provincia:                   d.Provincia,
+    codigo_postal:               d.Codigo_Postal,
+    direccion_completa:          d.Direccion_Propiedad,
+    zoho_modified_time:          d.Modified_Time ?? null,
+    synced_at:                   new Date().toISOString(),
   };
 }
 
@@ -207,7 +200,6 @@ async function upsertBatch(rows) {
 
 async function geocodeNuevos(deals) {
   const zohoIds = deals.map(d => d.id);
-
   const { data: existentes } = await supabase
     .from('fianzas')
     .select('zoho_id, lat, direccion_completa')
@@ -233,21 +225,16 @@ async function geocodeNuevos(deals) {
   for (const deal of pendientes) {
     const { address, calidad } = buildAddress(deal);
     if (!address) {
-      await supabase.from('fianzas')
-        .update({ calidad_geocodificacion: 'sin_direccion' })
-        .eq('zoho_id', deal.id);
+      await supabase.from('fianzas').update({ calidad_geocodificacion: 'sin_direccion' }).eq('zoho_id', deal.id);
       continue;
     }
     const { lat, lng } = await geocode(address);
-    await supabase.from('fianzas')
-      .update({
-        lat,
-        lng,
-        geocodificado:           lat !== null,
-        calidad_geocodificacion: calidad,
-        direccion_completa:      deal.Direccion_Propiedad ?? null,
-      })
-      .eq('zoho_id', deal.id);
+    await supabase.from('fianzas').update({
+      lat, lng,
+      geocodificado:           lat !== null,
+      calidad_geocodificacion: calidad,
+      direccion_completa:      deal.Direccion_Propiedad ?? null,
+    }).eq('zoho_id', deal.id);
     if (lat) count++;
   }
   return count;
@@ -256,7 +243,6 @@ async function geocodeNuevos(deals) {
 async function main() {
   console.log('🚀 Iniciando sync incremental Deals → Supabase');
   const token = await getAccessToken();
-
   const since = await getLastSyncDate();
   const deals = await fetchModifiedDeals(token, since);
 
@@ -279,14 +265,8 @@ async function main() {
   const geocoded = await geocodeNuevos(deals);
   if (geocoded > 0) console.log(`🗺️  ${geocoded} nuevas geocodificaciones`);
 
-  // Resumen
-  const { count } = await supabase
-    .from('fianzas')
-    .select('*', { count: 'exact', head: true });
+  const { count } = await supabase.from('fianzas').select('*', { count: 'exact', head: true });
   console.log(`📊 Total en Supabase: ${count}`);
 }
 
-main().catch(err => {
-  console.error('❌ Error:', err);
-  process.exit(1);
-});
+main().catch(err => { console.error('❌ Error:', err); process.exit(1); });

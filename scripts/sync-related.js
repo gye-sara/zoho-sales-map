@@ -29,7 +29,6 @@ async function getAccessToken() {
 }
 
 async function getLastSyncDate() {
-  // Usar la fecha del último sync de renovaciones
   const { data } = await supabase
     .from('renovaciones')
     .select('synced_at')
@@ -39,21 +38,29 @@ async function getLastSyncDate() {
   if (data && data.length > 0) {
     const lastSync = new Date(data[0].synced_at);
     lastSync.setHours(lastSync.getHours() - 1);
-    return lastSync.toISOString().replace('T', ' ').substring(0, 19);
+    return lastSync;
   }
-  return '2020-01-01 00:00:00';
+  return new Date('2020-01-01T00:00:00Z');
 }
 
 async function fetchModified(token, module, fields, since) {
   const results = [];
   let page      = 1;
   let hasMore   = true;
-  const criteria = encodeURIComponent(`(Modified_Time:greater_than:${since})`);
+  const sinceStr = since.toUTCString();
 
   while (hasMore) {
-    const url = `https://www.zohoapis.eu/crm/v7/${module}/search?criteria=${criteria}&fields=${fields}&per_page=200&page=${page}`;
+    const url = `https://www.zohoapis.eu/crm/v7/${module}?fields=${fields}&per_page=200&page=${page}`;
     try {
-      const res  = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
+      const res  = await fetch(url, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token}`,
+          'If-Modified-Since': sinceStr,
+        }
+      });
+
+      if (res.status === 304) break;
+
       const text = await res.text();
       if (!text || text.trim() === '') break;
       const data = JSON.parse(text);
@@ -78,81 +85,49 @@ async function main() {
   console.log('🚀 Iniciando sync incremental módulos relacionados');
   const token = await getAccessToken();
   const since = await getLastSyncDate();
-  console.log(`📅 Sincronizando cambios desde: ${since}`);
+  console.log(`📅 Sincronizando cambios desde: ${since.toUTCString()}`);
 
-  // Renovaciones
   const rens = await fetchModified(token, 'Renovaciones',
     'id,Name,Stage,Renovacion_N,Closing_Date,Amount,Estado_del_Contrato,id_ticket_fianzas,Modified_Time', since);
   console.log(`🔄 ${rens.length} renovaciones modificadas`);
+  await upsert('renovaciones', rens.map(r => ({
+    id: r.id, fianza_zoho_id: r.id_ticket_fianzas?.id ?? null,
+    name: r.Name, stage: r.Stage, renovacion_n: r.Renovacion_N,
+    closing_date: r.Closing_Date ?? null, amount: r.Amount,
+    estado_contrato: r.Estado_del_Contrato, synced_at: new Date().toISOString(),
+  })), 'id');
 
-  const renRows = rens.map(r => ({
-    id:               r.id,
-    fianza_zoho_id:   r.id_ticket_fianzas?.id ?? null,
-    name:             r.Name,
-    stage:            r.Stage,
-    renovacion_n:     r.Renovacion_N,
-    closing_date:     r.Closing_Date ?? null,
-    amount:           r.Amount,
-    estado_contrato:  r.Estado_del_Contrato,
-    synced_at:        new Date().toISOString(),
-  }));
-  await upsert('renovaciones', renRows, 'id');
-
-  // Recuperos
   const recs = await fetchModified(token, 'Impagos_Recuperos',
     'id,Name,Fase,Total_Reclamos,Saldo_Pendiente,Total_Pagado,id_ticket_fianzas,Modified_Time', since);
   console.log(`⚠️  ${recs.length} recuperos modificados`);
+  await upsert('impagos_recupero', recs.map(r => ({
+    id: r.id, fianza_zoho_id: r.id_ticket_fianzas?.id ?? null,
+    name: r.Name, fase: r.Fase, total_reclamos: r.Total_Reclamos,
+    saldo_pendiente: r.Saldo_Pendiente, total_pagado: r.Total_Pagado,
+    synced_at: new Date().toISOString(),
+  })), 'id');
 
-  const recRows = recs.map(r => ({
-    id:              r.id,
-    fianza_zoho_id:  r.id_ticket_fianzas?.id ?? null,
-    name:            r.Name,
-    fase:            r.Fase,
-    total_reclamos:  r.Total_Reclamos,
-    saldo_pendiente: r.Saldo_Pendiente,
-    total_pagado:    r.Total_Pagado,
-    synced_at:       new Date().toISOString(),
-  }));
-  await upsert('impagos_recupero', recRows, 'id');
-
-  // Notificaciones
   const nots = await fetchModified(token, 'Impagos_Notificaciones',
     'id,Name,Fase,Periodo_Mes,Periodo_A_o,Importe,id_ticket_fianzas,Modified_Time', since);
   console.log(`📋 ${nots.length} notificaciones modificadas`);
+  await upsert('impagos_notificaciones', nots.map(n => ({
+    id: n.id, fianza_zoho_id: n.id_ticket_fianzas?.id ?? null,
+    name: n.Name, fase: n.Fase, periodo_mes: n.Periodo_Mes,
+    periodo_ano: n.Periodo_A_o, importe: n.Importe,
+    synced_at: new Date().toISOString(),
+  })), 'id');
 
-  const notRows = nots.map(n => ({
-    id:             n.id,
-    fianza_zoho_id: n.id_ticket_fianzas?.id ?? null,
-    name:           n.Name,
-    fase:           n.Fase,
-    periodo_mes:    n.Periodo_Mes,
-    periodo_ano:    n.Periodo_A_o,
-    importe:        n.Importe,
-    synced_at:      new Date().toISOString(),
-  }));
-  await upsert('impagos_notificaciones', notRows, 'id');
-
-  // Legales
   const legs = await fetchModified(token, 'Impagos_Legales',
     'id,Name,Fase_Legal,Caso_Activo,Saldo_Pendiente,Saldo_Recuperado,Fianzas,Modified_Time', since);
   console.log(`⚖️  ${legs.length} legales modificados`);
-
-  const legRows = legs.map(l => ({
-    id:               l.id,
-    fianza_zoho_id:   l.Fianzas?.id ?? null,
-    name:             l.Name,
-    fase_legal:       l.Fase_Legal,
-    caso_activo:      l.Caso_Activo ?? false,
-    saldo_pendiente:  l.Saldo_Pendiente,
-    saldo_recuperado: l.Saldo_Recuperado,
-    synced_at:        new Date().toISOString(),
-  }));
-  await upsert('impagos_legales', legRows, 'id');
+  await upsert('impagos_legales', legs.map(l => ({
+    id: l.id, fianza_zoho_id: l.Fianzas?.id ?? null,
+    name: l.Name, fase_legal: l.Fase_Legal, caso_activo: l.Caso_Activo ?? false,
+    saldo_pendiente: l.Saldo_Pendiente, saldo_recuperado: l.Saldo_Recuperado,
+    synced_at: new Date().toISOString(),
+  })), 'id');
 
   console.log('✅ Sync incremental módulos relacionados completado');
 }
 
-main().catch(err => {
-  console.error('❌ Error:', err);
-  process.exit(1);
-});
+main().catch(err => { console.error('❌ Error:', err); process.exit(1); });

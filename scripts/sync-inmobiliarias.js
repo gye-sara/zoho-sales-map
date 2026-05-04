@@ -12,14 +12,14 @@ const GOOGLE_MAPS_KEY      = process.env.GOOGLE_MAPS_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const COQL_FIELDS = [
+const FIELDS = [
   'id', 'Account_Name', 'Raz_n_Social', 'NIF_CIF', 'Email', 'Email_Secundario',
   'Phone', 'Movil', 'Website', 'Comercial_GarantiaYa', 'Analytics_Agente',
   'Correo_Comercial', 'id_comercial', 'Comision', 'Comision_Renovacion',
   'Comision_Forma_de_Pago', 'Billing_Street', 'Billing_City', 'Billing_State',
   'Billing_Code', 'Billing_Country', 'Renta_Activa', 'Marca',
   'Acuerdo_de_Colaboracion_Firmado', 'Migrado', 'Modified_Time',
-].join(', ');
+].join(',');
 
 async function getAccessToken() {
   const res = await fetch('https://accounts.zoho.eu/oauth/v2/token', {
@@ -48,50 +48,47 @@ async function getLastSyncDate() {
   if (data && data.length > 0) {
     const lastSync = new Date(data[0].synced_at);
     lastSync.setHours(lastSync.getHours() - 1);
-    return lastSync.toISOString().replace('T', ' ').substring(0, 19);
+    return lastSync;
   }
-  return '2020-01-01 00:00:00';
+  return new Date('2020-01-01T00:00:00Z');
 }
 
 async function fetchModifiedInmobiliarias(token, since) {
   const results = {};
-  let offset    = 0;
+  let page      = 1;
   let hasMore   = true;
-  const LIMIT   = 200;
+  const sinceStr = since.toUTCString();
 
-  console.log(`📅 Trayendo inmobiliarias modificadas desde: ${since}`);
+  console.log(`📅 Trayendo inmobiliarias modificadas desde: ${sinceStr}`);
 
   while (hasMore) {
-    const query = `select ${COQL_FIELDS} from Accounts where Modified_Time >= '${since}' limit ${LIMIT} offset ${offset}`;
+    const url = `https://www.zohoapis.eu/crm/v7/Accounts?fields=${FIELDS}&per_page=200&page=${page}`;
     try {
-      const res  = await fetch('https://www.zohoapis.eu/crm/v7/coql', {
-        method: 'POST',
+      const res  = await fetch(url, {
         headers: {
           Authorization: `Zoho-oauthtoken ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ select_query: query }),
+          'If-Modified-Since': sinceStr,
+        }
       });
-      const data = await res.json();
 
-      if (data.code && data.code !== 'SUCCESS') {
-        console.error(`\n❌ Error COQL:`, data.code, data.message);
-        break;
-      }
+      if (res.status === 304) { console.log('\n✅ Sin cambios'); break; }
 
+      const text = await res.text();
+      if (!text || text.trim() === '') break;
+      const data = JSON.parse(text);
       if (!data.data || data.data.length === 0) break;
       data.data.forEach(d => { results[d.id] = d; });
       hasMore = data.info?.more_records ?? false;
-      offset += LIMIT;
+      page++;
     } catch (e) {
-      console.error(`\n❌ Error offset ${offset}:`, e.message);
+      console.error(`\n❌ Error página ${page}:`, e.message);
       break;
     }
     process.stdout.write(`\r📦 ${Object.keys(results).length} inmobiliarias modificadas...`);
     await new Promise(r => setTimeout(r, 250));
   }
 
-  console.log(`\n✅ ${Object.keys(results).length} inmobiliarias modificadas desde ${since}`);
+  console.log(`\n✅ ${Object.keys(results).length} inmobiliarias modificadas`);
   return Object.values(results);
 }
 
@@ -131,7 +128,6 @@ function buildAddress(d) {
   const street = d.Billing_Street?.trim();
   const city   = d.Billing_City?.trim();
   const state  = d.Billing_State?.trim();
-
   if (street && street.length > 5) return street;
   if (city || state) return [city, state].filter(Boolean).join(', ');
   return null;
@@ -197,42 +193,53 @@ async function upsertBatch(rows) {
   if (error) throw new Error(`Supabase upsert error: ${error.message}`);
 }
 
-async function main() {
-  console.log('🚀 Iniciando sync incremental Inmobiliarias → Supabase');
-  const token = await getAccessToken();
+async function updateStats(stats) {
+  let page = 0;
+  let total = 0;
+  const PAGE_SIZE = 1000;
 
-  const since         = await getLastSyncDate();
-  const inmobiliarias = await fetchModifiedInmobiliarias(token, since);
-
-  if (inmobiliarias.length === 0) {
-    console.log('✅ No hay inmobiliarias modificadas desde el último sync');
-    // Aun así recalcular stats porque pueden haber cambiado deals
-    console.log('📊 Recalculando stats de deals...');
-    const stats = await getDealsStats();
-    const { data: todas } = await supabase
+  while (true) {
+    const { data } = await supabase
       .from('inmobiliarias')
-      .select('zoho_id');
+      .select('zoho_id')
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    if (!data || data.length === 0) break;
 
-    const rows = (todas ?? []).map(i => ({
-      zoho_id:      i.zoho_id,
-      total_deals:  stats[i.zoho_id]?.total_deals  ?? 0,
+    const rows = data.map(i => ({
+      zoho_id:       i.zoho_id,
+      total_deals:   stats[i.zoho_id]?.total_deals   ?? 0,
       total_polizas: stats[i.zoho_id]?.total_polizas ?? 0,
       total_amount:  stats[i.zoho_id]?.total_amount  ?? 0,
-      synced_at:    new Date().toISOString(),
+      synced_at:     new Date().toISOString(),
     }));
 
     const BATCH = 100;
     for (let i = 0; i < rows.length; i += BATCH) {
       await upsertBatch(rows.slice(i, i + BATCH));
     }
-    console.log(`✅ Stats actualizadas para ${rows.length} inmobiliarias`);
-    return;
+    total += data.length;
+    if (data.length < PAGE_SIZE) break;
+    page++;
   }
+  return total;
+}
+
+async function main() {
+  console.log('🚀 Iniciando sync incremental Inmobiliarias → Supabase');
+  const token = await getAccessToken();
+  const since = await getLastSyncDate();
+  const inmobiliarias = await fetchModifiedInmobiliarias(token, since);
 
   console.log('📊 Calculando stats de deals...');
   const stats = await getDealsStats();
 
-  // Traer las ya geocodificadas
+  if (inmobiliarias.length === 0) {
+    console.log('✅ No hay inmobiliarias modificadas — actualizando solo stats...');
+    const total = await updateStats(stats);
+    console.log(`✅ Stats actualizadas para ${total} inmobiliarias`);
+    return;
+  }
+
   const zohoIds = inmobiliarias.map(d => d.id);
   const { data: yaGeocoded } = await supabase
     .from('inmobiliarias')
@@ -250,38 +257,32 @@ async function main() {
     const row      = mapInmobiliaria(inmo, stats);
     const address  = buildAddress(inmo);
     const existing = geocodedMap[inmo.id];
-
-    const dirCambio       = existing && address &&
-                            existing.billing_street?.trim() !== inmo.Billing_Street?.trim();
+    const dirCambio = existing && address && existing.billing_street?.trim() !== inmo.Billing_Street?.trim();
     const necesitaGeocode = address && (!existing?.lat || dirCambio);
 
     if (necesitaGeocode) {
       const { lat, lng } = await geocode(address);
-      row.lat                     = lat;
-      row.lng                     = lng;
+      row.lat = lat; row.lng = lng;
       row.geocodificado           = lat !== null;
       row.calidad_geocodificacion = lat ? 'completa' : 'sin_coordenadas';
       if (lat) geocodedCount++;
     } else if (existing?.lat) {
-      row.lat                     = existing.lat;
+      row.lat = existing.lat;
       row.geocodificado           = true;
       row.calidad_geocodificacion = 'completa';
     } else {
       row.calidad_geocodificacion = address ? 'sin_coordenadas' : 'sin_direccion';
     }
-
     rows.push(row);
   }
 
   const BATCH = 100;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    await upsertBatch(rows.slice(i, i + BATCH));
-  }
-
+  for (let i = 0; i < rows.length; i += BATCH) await upsertBatch(rows.slice(i, i + BATCH));
   console.log(`✅ ${rows.length} inmobiliarias actualizadas, ${geocodedCount} geocodificaciones`);
+
+  console.log('📊 Actualizando stats de todas las inmobiliarias...');
+  const total = await updateStats(stats);
+  console.log(`✅ Stats actualizadas para ${total} inmobiliarias`);
 }
 
-main().catch(err => {
-  console.error('❌ Error:', err);
-  process.exit(1);
-});
+main().catch(err => { console.error('❌ Error:', err); process.exit(1); });
