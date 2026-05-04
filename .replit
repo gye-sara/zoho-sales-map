@@ -1,4 +1,5 @@
 run = "npm run dev"
+modules = ["nodejs-20"]
 
 [nix]
 channel = "stable-23_11"
@@ -7,3 +8,7 @@ channel = "stable-23_11"
 build = ["npm", "run", "build"]
 run = ["npm", "run", "preview"]
 deploymentTarget = "static"
+publicDir = "dist"
+
+[agent]
+expertMode = true
