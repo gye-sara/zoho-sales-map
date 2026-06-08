@@ -56,7 +56,7 @@ export default function App() {
               padding:'6px 14px', borderRadius:'6px', border:'none', cursor:'pointer',
               fontSize:'12px', fontWeight:600,
               background: tab === 'fianzas' ? 'white' : 'transparent',
-              color: tab === 'fianzas' ? '#1a1a2e' : 'rgba(255,255,255,0.7)',
+              color: tab === 'fianzas' ? '#15235f' : 'rgba(255,255,255,0.7)',
             }}
           >
             🏠 Pólizas
@@ -67,7 +67,7 @@ export default function App() {
               padding:'6px 14px', borderRadius:'6px', border:'none', cursor:'pointer',
               fontSize:'12px', fontWeight:600,
               background: tab === 'inmobiliarias' ? 'white' : 'transparent',
-              color: tab === 'inmobiliarias' ? '#1a1a2e' : 'rgba(255,255,255,0.7)',
+              color: tab === 'inmobiliarias' ? '#15235f' : 'rgba(255,255,255,0.7)',
             }}
           >
             🏢 Inmobiliarias
@@ -127,7 +127,10 @@ export default function App() {
         )}
         <div style={{ flex:1 }}>
           {loading
-            ? <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', fontSize:'16px', color:'#666' }}>Cargando datos...</div>
+            ? <div style={{ display:'flex', flexDirection:'column', gap:'14px', alignItems:'center', justifyContent:'center', height:'100%' }}>
+                <div style={{ width:'38px', height:'38px', border:'3px solid #e6e9f4', borderTopColor:'#15235f', borderRadius:'50%', animation:'gySpin 0.8s linear infinite' }} />
+                <span style={{ fontSize:'15px', color:'#15235f', fontWeight:600 }}>Cargando datos…</span>
+              </div>
             : tab === 'fianzas'
               ? <Map fianzas={fianzas} stats={statsF} filtersOpen={showFilters} />
               : <MapInmobiliarias inmobiliarias={inmobiliarias} stats={statsI} filtersOpen={showFilters} />

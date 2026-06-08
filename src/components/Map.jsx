@@ -26,7 +26,7 @@ const faseColor = (fase) => {
   if (f.includes('pagado') || f.includes('cerrado') || f.includes('recuperado')) return '#10b981';
   if (f.includes('legal') || f.includes('demanda') || f.includes('juicio')) return '#ef4444';
   if (f.includes('nuevo') || f.includes('pendiente') || f.includes('notif')) return '#f59e0b';
-  return '#6366f1';
+  return '#1c3fae';
 };
 
 function buildPopup(f) {
@@ -44,7 +44,7 @@ function buildPopup(f) {
     const rows = renovaciones.map(r => `
       <div style="background:#f9f9f9;border-radius:6px;padding:8px 10px;margin-bottom:6px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(r.name)}</span>
+          <span style="font-size:11px;color:#15235f;font-weight:600;">${esc(r.name)}</span>
           <span style="font-size:11px;color:#10b981;font-weight:700;">${fmt(r.amount)}</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -70,7 +70,7 @@ function buildPopup(f) {
     const rows = recuperos.map(r => `
       <div style="background:#fff8f8;border-radius:6px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #ef4444;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(r.name)}</span>
+          <span style="font-size:11px;color:#15235f;font-weight:600;">${esc(r.name)}</span>
           <span style="font-size:10px;background:${faseColor(r.fase)}22;color:${faseColor(r.fase)};padding:1px 6px;border-radius:10px;font-weight:600;">${esc(r.fase)}</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px;">
@@ -104,7 +104,7 @@ function buildPopup(f) {
     const rows = notificaciones.map(n => `
       <div style="background:#fffbf0;border-radius:6px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #f59e0b;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(n.name)}</span>
+          <span style="font-size:11px;color:#15235f;font-weight:600;">${esc(n.name)}</span>
           <span style="font-size:11px;color:#f59e0b;font-weight:700;">${fmt(n.importe)}</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
@@ -128,7 +128,7 @@ function buildPopup(f) {
     const rows = legales.map(l => `
       <div style="background:#fff0f0;border-radius:6px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #dc2626;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:11px;color:#1a1a2e;font-weight:600;">${esc(l.name)}</span>
+          <span style="font-size:11px;color:#15235f;font-weight:600;">${esc(l.name)}</span>
           <span style="font-size:10px;background:${l.caso_activo ? '#fee2e2' : '#f0fdf4'};color:${l.caso_activo ? '#dc2626' : '#16a34a'};padding:1px 6px;border-radius:10px;font-weight:600;">
             ${l.caso_activo ? '🔴 Activo' : '✅ Cerrado'}
           </span>
@@ -159,8 +159,8 @@ function buildPopup(f) {
   }
 
   return `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;width:300px;padding:14px 16px;">
-      <div style="background:#1a1a2e;padding:12px 14px;margin:-14px -20px 12px;display:flex;align-items:center;justify-content:space-between;border-radius:4px 4px 0 0;">
+    <div style="font-family:'Poppins',system-ui,-apple-system,sans-serif;width:300px;padding:14px 16px;">
+      <div style="background:#15235f;padding:12px 14px;margin:-14px -20px 12px;display:flex;align-items:center;justify-content:space-between;border-radius:4px 4px 0 0;">
         <span style="color:white;font-size:14px;font-weight:700;">${esc(f.deal_name)}</span>
         <span style="background:${estadoBadgeBg};color:${estadoBadgeColor};font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;text-transform:uppercase;">${esc(f.estado_contrato)}</span>
       </div>
@@ -180,11 +180,11 @@ function buildPopup(f) {
         <div style="height:1px;background:#f0f0f0;"></div>
         <div style="display:flex;justify-content:space-between;">
           <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Precio garantía</span>
-          <span style="font-size:12px;color:#1a1a2e;font-weight:700;">${fmt(f.amount)}</span>
+          <span style="font-size:12px;color:#15235f;font-weight:700;">${fmt(f.amount)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;">
           <span style="font-size:10px;color:#999;text-transform:uppercase;font-weight:600;">Alquiler</span>
-          <span style="font-size:12px;color:#1a1a2e;font-weight:700;">${fmt(f.alquiler)}<span style="font-size:10px;font-weight:400;color:#999">/mes</span></span>
+          <span style="font-size:12px;color:#15235f;font-weight:700;">${fmt(f.alquiler)}<span style="font-size:10px;font-weight:400;color:#999">/mes</span></span>
         </div>
         <div style="height:1px;background:#f0f0f0;"></div>
         ${fmtDate(f.closing_date) ? `
@@ -250,7 +250,7 @@ export default function Map({ fianzas, stats, filtersOpen }) {
         const count = c.getChildCount();
         const size  = count > 100 ? 44 : count > 50 ? 38 : count > 10 ? 32 : 28;
         return L.divIcon({
-          html: `<div style="width:${size}px;height:${size}px;background:#1a1a2e;color:white;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.3);">${count > 999 ? '+999' : count}</div>`,
+          html: `<div style="width:${size}px;height:${size}px;background:#15235f;color:white;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.3);">${count > 999 ? '+999' : count}</div>`,
           className: '',
           iconSize: [size, size],
         });
@@ -293,10 +293,10 @@ export default function Map({ fianzas, stats, filtersOpen }) {
       }}>
         <button
           onClick={() => setShowPanel(!showPanel)}
-          style={{ width:'100%', padding:'10px 14px', display:'flex', alignItems:'center', justifyContent:'space-between', background:'none', border:'none', cursor:'pointer', borderBottom: showPanel ? '1px solid #f0f0f0' : 'none' }}
+          style={{ width:'100%', padding:'12px 14px', display:'flex', alignItems:'center', justifyContent:'space-between', background:'linear-gradient(135deg,#15235f 0%,#0d1640 100%)', border:'none', cursor:'pointer' }}
         >
-          <span style={{ fontSize:'12px', fontWeight:700, color:'#1a1a2e' }}>📊 {(stats?.total ?? 0).toLocaleString('es-ES')} pólizas</span>
-          <span style={{ fontSize:'12px', color:'#999' }}>{showPanel ? '▼' : '▲'}</span>
+          <span style={{ fontSize:'12.5px', fontWeight:700, color:'#fff' }}>📊 {(stats?.total ?? 0).toLocaleString('es-ES')} pólizas</span>
+          <span style={{ fontSize:'11px', color:'rgba(255,255,255,0.65)' }}>{showPanel ? '▼' : '▲'}</span>
         </button>
         {showPanel && (
           <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:'10px' }}>
@@ -334,7 +334,7 @@ export default function Map({ fianzas, stats, filtersOpen }) {
             )}
             <div style={{ fontWeight:600, fontSize:'11px', color:'#999', textTransform:'uppercase', letterSpacing:'0.5px', paddingTop:'10px', borderTop:'1px solid #f0f0f0' }}>Agrupación</div>
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-              <span style={{ width:22, height:22, borderRadius:'50%', background:'#1a1a2e', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'9px', fontWeight:700, border:'2px solid white', boxShadow:'0 0 0 1px #1a1a2e', flexShrink:0 }}>N</span>
+              <span style={{ width:22, height:22, borderRadius:'50%', background:'#15235f', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'9px', fontWeight:700, border:'2px solid white', boxShadow:'0 0 0 1px #15235f', flexShrink:0 }}>N</span>
               <span style={{ fontSize:'12px', color:'#333' }}>Haz zoom para expandir</span>
             </div>
           </div>
