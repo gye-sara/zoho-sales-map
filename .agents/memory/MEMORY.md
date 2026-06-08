@@ -1,0 +1,1 @@
+- [Zip extraction](zip-extraction.md) — no unzip/python/7z in this container; extract .zip via Node zlib in the sandbox.

@@ -38,14 +38,14 @@ export default function App() {
   return (
     <div style={{ display:'flex', height:'100vh', flexDirection:'column' }}>
       <header style={{
-        background:'#1a1a2e', color:'white',
+        background:'linear-gradient(135deg, #15235f 0%, #0d1640 100%)', color:'white',
         padding:'10px 24px', display:'flex',
         alignItems:'center', justifyContent:'space-between',
         zIndex:1001, position:'relative', gap:'12px',
+        boxShadow:'0 2px 12px rgba(13,22,64,0.25)',
       }}>
         <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
-          <img src="/favicon.png" alt="logo" style={{ width:'28px', height:'28px', borderRadius:'6px' }} />
-          <h1 style={{ fontSize:'16px', fontWeight:600, whiteSpace:'nowrap' }}>GarantíaYa</h1>
+          <img src="/logo-wordmark.png" alt="GarantíaYa" style={{ height:'26px', width:'auto', filter:'brightness(0) invert(1)' }} />
         </div>
 
         {/* Tabs */}
@@ -87,7 +87,7 @@ export default function App() {
           >
             ⚙️ Filtros
             {activeCount > 0 && (
-              <span style={{ background:'#6366f1', borderRadius:'10px', padding:'1px 6px', fontSize:'11px' }}>
+              <span style={{ background:'#e2231a', borderRadius:'10px', padding:'1px 6px', fontSize:'11px' }}>
                 {activeCount}
               </span>
             )}
